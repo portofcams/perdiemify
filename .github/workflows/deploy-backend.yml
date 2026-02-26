@@ -1,0 +1,22 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/api/**', 'packages/scraper/**', 'packages/shared/**', 'infra/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: 45.77.120.186
+          username: deploy
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          script: |
+            cd /opt/perdiemify
+            git pull origin main
+            docker compose -f infra/docker-compose.prod.yml build
+            docker compose -f infra/docker-compose.prod.yml up -d
+            docker system prune -f

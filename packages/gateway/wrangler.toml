@@ -1,0 +1,11 @@
+name = "perdiemify-gateway"
+main = "src/index.ts"
+compatibility_date = "2024-09-25"
+
+[vars]
+VULTR_API_ORIGIN = "http://45.77.120.186:3001"
+
+# KV namespace for caching (create via: wrangler kv namespace create CACHE)
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "<your-kv-namespace-id>"

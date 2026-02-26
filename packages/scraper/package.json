@@ -1,0 +1,26 @@
+{
+  "name": "@perdiemify/scraper",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@perdiemify/shared": "*",
+    "puppeteer": "^23.0.0",
+    "cheerio": "^1.0.0",
+    "bullmq": "^5.30.0",
+    "ioredis": "^5.4.0",
+    "postgres": "^3.4.0",
+    "drizzle-orm": "^0.38.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

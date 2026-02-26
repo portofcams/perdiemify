@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: packages/api/Dockerfile
+    ports:
+      - "3001:3001"
+    env_file: ../.env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  scraper:
+    build:
+      context: ..
+      dockerfile: packages/scraper/Dockerfile
+    env_file: ../.env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  worker:
+    build:
+      context: ..
+      dockerfile: packages/api/Dockerfile
+    command: node dist/queue/worker.js
+    env_file: ../.env
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: perdiemify
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: perdiemify
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /etc/letsencrypt:/etc/letsencrypt
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    ports:
+      - "127.0.0.1:3010:3001"
+    volumes:
+      - uptimekuma:/app/data
+    restart: unless-stopped
+    networks:
+      - perdiemify
+
+volumes:
+  pgdata:
+  redisdata:
+  uptimekuma:
+
+networks:
+  perdiemify:
+    driver: bridge
