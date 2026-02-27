@@ -88,10 +88,43 @@ apps/web/src/app/search/page.tsx            — Real API + graceful fallback
 4. **Resend** (resend.com) — transactional email (free 3K/month)
 5. **Vultr server** — already provisioned at 45.77.120.186, needs setup script run
 
-### Next session: pick up at Day 5
+### Deployment (also Feb 26)
+- [x] **Vultr VPS deployed** — all 7 Docker containers running at 45.77.120.186
+  - infra-api-1, infra-worker-1, infra-scraper-1
+  - infra-postgres-1, infra-redis-1, infra-nginx-1, infra-uptime-kuma-1
+- [x] **Docker build fixes**
+  - Standalone tsconfigs (removed `extends` for Docker context)
+  - Added `skipLibCheck: true` (drizzle-orm type errors)
+  - Added `esModuleInterop: true` (express/cors/morgan default imports)
+  - Type cast `res.json()` for strict mode TS (`as` casts)
+  - Copied `tsconfig.json` in both API and scraper Dockerfiles
+- [x] **API keys configured** in `.env`
+  - Amadeus, Stripe, Clerk, Resend all set
+- [x] **Git workflow**: push from Mac → pull on Vultr → docker compose rebuild
+
+### Upgrades applied (Feb 26)
+- Next.js 14.2 → 15.5.12 (Node 25 incompatible with Next 14)
+- React 18.3 → 19.2.4
+- Tried Next.js 16 but Turbopack compilation hung; reverted to 15
+
+### Local dev status (Feb 26–27)
+- [x] Next.js dev server running on port 3000 — **working**
+- [x] Homepage renders correctly (Coming Soon landing page)
+- [x] Search page renders: city autocomplete, date pickers, Hotels/Flights/Cars tabs
+- [x] Mock search results working (Demo data fallback when API not running locally)
+- [x] Hotel cards show: pricing, per diem delta, loyalty points, amenities, Book Now
+- [ ] API server not running locally (only on Vultr) — need `npm run dev --workspace=packages/api`
+
+---
+
+## 2026-02-27 — Day 5: Landing Page Polish + Continued Build
+
+### Next session: pick up here
+- **Landing page polish** — make the Coming Soon page production-ready
 - Day 5: Flight search + car rental search (Amadeus APIs)
 - Day 6: Affiliate links (Travelpayouts, Booking.com)
 - Day 7: Trip CRUD + dashboard
+- Set up DNS/SSL for perdiemify.com → 45.77.120.186
 
 ---
-*Last updated: Feb 26, 2026*
+*Last updated: Feb 27, 2026*
