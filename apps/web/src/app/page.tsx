@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
@@ -230,16 +230,29 @@ export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const savings = useCountUp(4200, 2200, '$', '');
   const tracked = useCountUp(2100000, 2500, '$', '');
   const users = useCountUp(1840, 2000, '', '');
+
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileMenuOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -287,7 +300,7 @@ export default function LandingPage() {
             <SignedIn>
               <Link
                 href="/dashboard"
-                className="px-4 py-2 text-sm font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+                className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-brand-600 hover:text-brand-700 transition-colors"
               >
                 Dashboard
               </Link>
@@ -302,14 +315,90 @@ export default function LandingPage() {
               </Link>
               <a
                 href="#signup"
-                className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors shadow-sm"
+                className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors shadow-sm"
               >
                 Join Waitlist
               </a>
             </SignedOut>
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="sm:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </nav>
+
+      {/* ─── MOBILE MENU ─── */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] sm:hidden">
+          <div className="absolute inset-0 bg-black/30" onClick={closeMobileMenu} />
+          <div className="absolute top-0 right-0 w-72 h-full bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-5 h-16 border-b border-gray-100">
+              <span className="text-lg font-extrabold text-gradient">Perdiemify</span>
+              <button onClick={closeMobileMenu} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 px-5 py-6 space-y-1 overflow-y-auto">
+              <a href="#features" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                Features
+              </a>
+              <a href="#how-it-works" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                How It Works
+              </a>
+              <a href="#pricing" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                Pricing
+              </a>
+              <div className="border-t border-gray-100 my-3" />
+              <Link href="/search" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-brand-600 hover:bg-brand-50 transition-colors">
+                Try Search
+              </Link>
+              <Link href="/calculator" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                Per Diem Calculator
+              </Link>
+              <div className="border-t border-gray-100 my-3" />
+              <SignedIn>
+                <Link href="/dashboard" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-brand-600 hover:bg-brand-50 transition-colors">
+                  Dashboard
+                </Link>
+              </SignedIn>
+              <SignedOut>
+                <Link href="/sign-in" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                  Sign In
+                </Link>
+                <Link href="/sign-up" onClick={closeMobileMenu} className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+                  Sign Up
+                </Link>
+              </SignedOut>
+            </div>
+            <div className="px-5 pb-6">
+              <SignedOut>
+                <a
+                  href="#signup"
+                  onClick={closeMobileMenu}
+                  className="block w-full text-center px-4 py-3 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-colors shadow-sm"
+                >
+                  Join Waitlist
+                </a>
+              </SignedOut>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── HERO ─── */}
       <section className="relative overflow-hidden pt-28 sm:pt-36 pb-20 sm:pb-28">

@@ -1,17 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { users } from '../db/schema';
 
 export const webhooksRouter = Router();
 
 /**
  * Clerk webhook handler — syncs user creation/updates/deletions to our DB.
- *
- * Clerk sends webhooks for:
- * - user.created — create user in our DB
- * - user.updated — update email/name
- * - user.deleted — soft-delete or cascade-delete user
- *
- * Requires CLERK_WEBHOOK_SECRET to be set for signature verification.
- * For MVP without webhook secret, we accept requests on internal network only.
  */
 webhooksRouter.post('/clerk', async (req: Request, res: Response) => {
   try {
@@ -31,14 +26,13 @@ webhooksRouter.post('/clerk', async (req: Request, res: Response) => {
 
         console.log(`New user registered: ${email} (${clerkId})`);
 
-        // TODO: Insert into users table when DB is connected
-        // await db.insert(users).values({
-        //   clerkId,
-        //   email,
-        //   name,
-        //   subscriptionTier: 'free',
-        //   perDiemSource: 'gsa',
-        // });
+        await db.insert(users).values({
+          clerkId,
+          email: email || '',
+          name,
+          subscriptionTier: 'free',
+          perDiemSource: 'gsa',
+        }).onConflictDoNothing();
 
         return res.json({ success: true, message: 'User created' });
       }
@@ -50,10 +44,10 @@ webhooksRouter.post('/clerk', async (req: Request, res: Response) => {
 
         console.log(`User updated: ${email} (${clerkId})`);
 
-        // TODO: Update users table
-        // await db.update(users)
-        //   .set({ email, name, updatedAt: new Date() })
-        //   .where(eq(users.clerkId, clerkId));
+        await db
+          .update(users)
+          .set({ email: email || undefined, name, updatedAt: new Date() })
+          .where(eq(users.clerkId, clerkId));
 
         return res.json({ success: true, message: 'User updated' });
       }
@@ -62,8 +56,7 @@ webhooksRouter.post('/clerk', async (req: Request, res: Response) => {
         const { id: clerkId } = data;
         console.log(`User deleted: ${clerkId}`);
 
-        // TODO: Delete from users table (cascade deletes trips, bookings, etc.)
-        // await db.delete(users).where(eq(users.clerkId, clerkId));
+        await db.delete(users).where(eq(users.clerkId, clerkId));
 
         return res.json({ success: true, message: 'User deleted' });
       }

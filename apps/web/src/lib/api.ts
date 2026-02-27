@@ -1,23 +1,30 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+interface ApiResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 export async function apiFetch<T>(
   path: string,
-  options?: RequestInit
-): Promise<{ success: boolean; data?: T; error?: string }> {
-  const url = `${API_URL}${path}`;
+  init?: RequestInit
+): Promise<ApiResult<T>> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+      ...init,
+    });
 
-  const res = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    return { success: false, error: body.error || `HTTP ${res.status}` };
+    const json = await res.json();
+    return json as ApiResult<T>;
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Network error',
+    };
   }
-
-  return res.json();
 }

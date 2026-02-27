@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { CityAutocomplete } from './CityAutocomplete';
 import type { BookingType } from '@/types';
 
 interface SearchValues {
@@ -14,87 +13,133 @@ interface SearchValues {
 
 interface Props {
   onSearch: (values: SearchValues) => void;
-  loading?: boolean;
+  loading: boolean;
 }
 
-const searchTabs: { value: BookingType; label: string; icon: string }[] = [
-  { value: 'hotel', label: 'Hotels', icon: '🏨' },
-  { value: 'flight', label: 'Flights', icon: '✈️' },
-  { value: 'car', label: 'Cars', icon: '🚗' },
+const tabs: { id: BookingType; label: string; icon: string }[] = [
+  { id: 'hotel', label: 'Hotels', icon: '🏨' },
+  { id: 'flight', label: 'Flights', icon: '✈️' },
+  { id: 'car', label: 'Cars', icon: '🚗' },
 ];
 
 export function UnifiedSearchBar({ onSearch, loading }: Props) {
-  const [cityDisplay, setCityDisplay] = useState('');
+  const [type, setType] = useState<BookingType>('hotel');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
-  const [type, setType] = useState<BookingType>('hotel');
 
-  function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!city || !state || !checkIn || !checkOut) return;
+    if (!city || !checkIn || !checkOut) return;
     onSearch({ city, state, checkIn, checkOut, type });
-  }
-
-  // Set minimum check-in to today
-  const today = new Date().toISOString().split('T')[0]!;
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full">
-      {/* Search type tabs */}
-      <div className="flex gap-1 mb-4">
-        {searchTabs.map((tab) => (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {tabs.map((tab) => (
           <button
-            key={tab.value}
+            key={tab.id}
             type="button"
-            onClick={() => setType(tab.value)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              type === tab.value
-                ? 'bg-brand-500 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            onClick={() => setType(tab.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              type === tab.id
+                ? 'bg-white text-brand-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>{tab.icon}</span>
+            <span className="mr-1.5">{tab.icon}</span>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Search fields */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <CityAutocomplete
-          value={cityDisplay}
-          onChange={setCityDisplay}
-          onSelect={(c, s) => { setCity(c); setState(s); }}
-          placeholder="Where are you going?"
-        />
-        <input
-          type="date"
-          value={checkIn}
-          min={today}
-          onChange={(e) => {
-            setCheckIn(e.target.value);
-            // Auto-advance checkout if before checkin
-            if (checkOut && e.target.value > checkOut) setCheckOut('');
-          }}
-          className="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-gray-900 transition-all"
-        />
-        <input
-          type="date"
-          value={checkOut}
-          min={checkIn || today}
-          onChange={(e) => setCheckOut(e.target.value)}
-          className="px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-gray-900 transition-all"
-        />
-        <button
-          type="submit"
-          disabled={loading || !city || !checkIn || !checkOut}
-          className="px-6 py-3 bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-brand-500/25 disabled:shadow-none"
-        >
-          {loading ? 'Searching...' : 'Search & Save'}
-        </button>
+      {/* Fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="lg:col-span-1">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            City
+          </label>
+          <input
+            type="text"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="Washington"
+            required
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            State
+          </label>
+          <input
+            type="text"
+            value={state}
+            onChange={(e) => setState(e.target.value.toUpperCase())}
+            placeholder="DC"
+            maxLength={2}
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm uppercase"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            Check In
+          </label>
+          <input
+            type="date"
+            value={checkIn}
+            onChange={(e) => setCheckIn(e.target.value)}
+            required
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            Check Out
+          </label>
+          <input
+            type="date"
+            value={checkOut}
+            onChange={(e) => setCheckOut(e.target.value)}
+            required
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
+          />
+        </div>
+
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+                Search
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {type !== 'hotel' && (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {type === 'flight' ? 'Flight' : 'Car'} search is coming soon! Hotel search is available now.
+        </p>
+      )}
     </form>
   );
 }

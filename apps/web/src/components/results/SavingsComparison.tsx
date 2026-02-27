@@ -1,70 +1,47 @@
 'use client';
 
-import { formatCurrency } from '@/lib/utils';
 import type { SearchResult, PerDiemRates } from '@/types';
 
-interface SavingsComparisonProps {
+interface Props {
   savingsMax: SearchResult | null;
   smartValue: SearchResult | null;
   rates: PerDiemRates;
 }
 
-export function SavingsComparison({ savingsMax, smartValue, rates }: SavingsComparisonProps) {
+const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+export function SavingsComparison({ savingsMax, smartValue, rates }: Props) {
   if (!savingsMax && !smartValue) return null;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-      {/* Savings Max */}
-      {savingsMax && (
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4 hover:border-green-300 transition-colors">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span>💰</span>
-            <span className="text-sm font-bold text-green-700">Savings Max</span>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {savingsMax && savingsMax.perDiemDelta > 0 && (
+        <div className="bg-brand-50 border border-brand-200 rounded-xl p-4">
+          <div className="text-xs font-bold text-brand-600 uppercase tracking-wider mb-1">Max Savings</div>
+          <div className="font-bold text-gray-900 text-sm truncate">{savingsMax.name}</div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-xl font-extrabold text-brand-600">
+              +{fmt.format(savingsMax.perDiemDelta)}
+            </span>
+            <span className="text-xs text-gray-400">
+              ${savingsMax.pricePerNight ?? Math.round(savingsMax.price / (rates.nights || 1))}/nt
+            </span>
           </div>
-          <div className="text-lg font-bold text-gray-900 truncate">{savingsMax.name}</div>
-          <div className="text-sm text-gray-500">
-            {savingsMax.pricePerNight ? formatCurrency(savingsMax.pricePerNight) : formatCurrency(savingsMax.price / rates.nights)}/night
-          </div>
-          {savingsMax.rating && (
-            <div className="text-xs text-gray-400 mt-0.5">
-              {'⭐'.repeat(Math.min(5, Math.floor(savingsMax.rating)))} {savingsMax.rating}
-            </div>
-          )}
-          <div className="mt-2 text-green-700 font-bold text-xl">
-            You pocket {formatCurrency(savingsMax.perDiemDelta)}/trip
-          </div>
-          {savingsMax.loyaltyProgram && (
-            <div className="text-xs text-green-600 mt-1">
-              + {savingsMax.loyaltyProgram} points
-            </div>
-          )}
         </div>
       )}
 
-      {/* Smart Value */}
-      {smartValue && (
-        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 hover:border-amber-300 transition-colors">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span>⭐</span>
-            <span className="text-sm font-bold text-amber-700">Smart Value</span>
+      {smartValue && smartValue.id !== savingsMax?.id && (
+        <div className="bg-accent-50 border border-accent-200 rounded-xl p-4">
+          <div className="text-xs font-bold text-accent-600 uppercase tracking-wider mb-1">Smart Value</div>
+          <div className="font-bold text-gray-900 text-sm truncate">{smartValue.name}</div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-xl font-extrabold text-accent-600">
+              {smartValue.perDiemDelta >= 0 ? '+' : ''}{fmt.format(smartValue.perDiemDelta)}
+            </span>
+            <span className="text-xs text-gray-400">
+              ${smartValue.pricePerNight ?? Math.round(smartValue.price / (rates.nights || 1))}/nt
+            </span>
           </div>
-          <div className="text-lg font-bold text-gray-900 truncate">{smartValue.name}</div>
-          <div className="text-sm text-gray-500">
-            {smartValue.pricePerNight ? formatCurrency(smartValue.pricePerNight) : formatCurrency(smartValue.price / rates.nights)}/night
-          </div>
-          {smartValue.rating && (
-            <div className="text-xs text-gray-400 mt-0.5">
-              {'⭐'.repeat(Math.min(5, Math.floor(smartValue.rating)))} {smartValue.rating}
-            </div>
-          )}
-          <div className="mt-2 text-amber-700 font-bold text-xl">
-            You pocket {formatCurrency(smartValue.perDiemDelta)}/trip
-          </div>
-          {smartValue.loyaltyProgram && (
-            <div className="text-xs text-amber-600 mt-1">
-              + {smartValue.loyaltyProgram} points
-            </div>
-          )}
         </div>
       )}
     </div>
