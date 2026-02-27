@@ -661,10 +661,132 @@ packages/api/src/index.ts                     — Registered meals route
 - Web container: rebuilt with all new pages
 - All 8 containers running, all endpoints verified
 
-### Next session: pick up here
-- Day 12: PWA (service worker, manifest, install prompt)
-- Day 14: Launch polish (SEO meta tags, OG images, error boundaries)
-- Day 6: Affiliate links (when user has API keys)
+---
+
+## 2026-02-27 — Session 5b: PWA, Polish, Analytics, Scraper, Deal Alerts
+
+### Phase 1 — COMPLETE
+| Day | Task | Status |
+|-----|------|--------|
+| 1 | Scaffolding | Done |
+| 2 | Auth & Profiles (Clerk) | Done |
+| 3 | Per Diem Engine | Done |
+| 4 | Hotel Search (Amadeus) | Done |
+| 5 | Flights & Cars | Done |
+| 6 | Affiliate Links | Back-burnered |
+| 7 | Trips & Dashboard | Done |
+| 8 | Payments (Stripe) | Done |
+| 9 | Discount Codes | Done |
+| 10 | Loyalty Tracker | Done |
+| 11 | Meal Tracker | Done |
+| 12 | PWA | **Done** (today) |
+| 13 | Landing Page & SEO | Done |
+| 14 | Launch polish | **Done** (today) |
+
+### Completed work
+
+#### 1. PWA Support
+- Created `public/sw.js` — service worker with network-first for pages, cache-first for static assets, offline fallback
+- Created `public/icons/icon-192.svg` and `icon-512.svg` — SVG app icons
+- Updated `public/manifest.json` — shortcuts, categories, orientation
+- Created `src/app/offline/page.tsx` — branded offline fallback page
+- Created `src/components/PWAInstallPrompt.tsx` — beforeinstallprompt event, install banner, dismiss with localStorage
+- Wired manifest/icons/apple-web-app metadata into layout.tsx
+- Added `/offline(.*)` to Clerk middleware public routes
+
+#### 2. Launch Polish
+- Created `src/app/error.tsx` — global error boundary with retry/go-home
+- Created `src/app/dashboard/error.tsx` — dashboard error boundary
+- Created `src/app/opengraph-image.tsx` — dynamic OG image (1200x630, edge runtime)
+- Created `src/app/search/layout.tsx` — SEO metadata for search page
+- Created `src/app/calculator/layout.tsx` — SEO metadata for calculator page
+- Created `src/app/sitemap.ts` — dynamic sitemap
+- Created `public/robots.txt` — allows public pages, blocks /dashboard, /sign-in, /api
+
+#### 3. Savings Analytics Dashboard
+- Installed `recharts` in web workspace
+- Created `packages/api/src/routes/analytics.ts`:
+  - `GET /api/analytics/overview` — savings by trip, monthly savings (cumulative), category breakdown, loyalty points, meal spending
+- Created `apps/web/src/app/dashboard/analytics/page.tsx`:
+  - Summary cards (total savings, trips, loyalty points, meal spending)
+  - Cumulative savings line chart
+  - Savings by trip bar chart
+  - Category breakdown donut chart
+- Added Analytics nav link to dashboard
+
+#### 4. Enhanced Scraper Framework
+- Rewrote `packages/scraper/src/scrapers.ts` with `BaseScraper` abstract class:
+  - UA rotation (5 user agents), retry with exponential backoff, configurable timeout
+  - `parsePercentOrDollar()` helper
+- 4 concrete scrapers:
+  - `GovTravelScraper` — 10 curated gov/military codes (added Hyatt, Wyndham, Hertz, Avis)
+  - `RetailMeNotScraper` — 5 targets including Kayak
+  - `HotelChainScraper` — 7 promo codes (AAA, Senior, Advance, LongStay, Weeknight)
+  - `SlickDealsScraper` — scrapes slickdeals.net/deals/travel/
+
+#### 5. Deal Alert Emails
+- Created `packages/api/src/services/deal-alerts.ts`:
+  - `sendDealAlerts()` — queries Pro+ users, sends branded HTML email via Resend
+  - Deal table with code, provider, discount, type columns
+  - "View All Deals" CTA button
+- Added `POST /api/deals/notify` internal endpoint in deals.ts:
+  - Protected by `x-internal-key` header
+  - Called by scraper after finding new deals
+
+### New files created
+```
+apps/web/public/icons/icon-192.svg              — PWA icon
+apps/web/public/icons/icon-512.svg              — PWA icon
+apps/web/public/robots.txt                      — SEO robots
+apps/web/public/sw.js                           — Service worker
+apps/web/src/app/calculator/layout.tsx          — SEO metadata
+apps/web/src/app/dashboard/analytics/page.tsx   — Analytics dashboard
+apps/web/src/app/dashboard/error.tsx            — Dashboard error boundary
+apps/web/src/app/error.tsx                      — Global error boundary
+apps/web/src/app/offline/page.tsx               — Offline fallback page
+apps/web/src/app/opengraph-image.tsx            — Dynamic OG image
+apps/web/src/app/search/layout.tsx              — SEO metadata
+apps/web/src/app/sitemap.ts                     — Dynamic sitemap
+apps/web/src/components/PWAInstallPrompt.tsx    — PWA install prompt
+packages/api/src/routes/analytics.ts            — Analytics API
+packages/api/src/services/deal-alerts.ts        — Deal alert email service
+```
+
+### Files modified
+```
+apps/web/package.json                           — Added recharts
+apps/web/public/manifest.json                   — Shortcuts, categories
+apps/web/src/app/dashboard/page.tsx             — Analytics nav link
+apps/web/src/app/layout.tsx                     — PWA metadata + install prompt
+apps/web/src/middleware.ts                      — /offline public route
+packages/api/src/index.ts                       — Analytics + meals routes
+packages/api/src/routes/deals.ts                — /notify endpoint
+packages/scraper/src/scrapers.ts                — BaseScraper + 4 scrapers
+```
+
+### Deployment
+- All 3 containers rebuilt (api, web, scraper)
+- Offline page fix: added `'use client'` directive for static build
+- Nginx restarted to reconnect to recreated containers
+- All endpoints verified:
+  - `/api/health` → 200
+  - `/api/deals` → 200 (17 codes including new hotel chain scraped codes)
+  - `/api/analytics/overview` → 401 (auth required, correct)
+  - `https://perdiemify.com/` → 200
+  - `https://perdiemify.com/offline` → 200
+
+### Phase 1 complete — what's next (Phase 2+)
+1. Affiliate links (needs user to sign up for Travelpayouts, Booking.com, Kiwi APIs)
+2. Stripe webhook testing (needs Cloudflare SSL → "Flexible" first)
+3. Clerk webhook URL configuration
+4. Enhanced search (multi-provider aggregation, price alerts)
+5. Admin dashboard (user management, scraper monitoring)
+
+### User homework (for tomorrow)
+- [ ] Set Cloudflare SSL mode to "Flexible"
+- [ ] Set Stripe webhook URL: http://perdiemify.com/api/billing/webhook
+- [ ] Set Clerk webhook URL: http://perdiemify.com/api/webhooks/clerk
+- [ ] Sign up for affiliate programs (Travelpayouts, Booking.com, Kiwi)
 
 ---
-*Last updated: Feb 27, 2026 — Session 5*
+*Last updated: Feb 27, 2026 — Session 5b*
