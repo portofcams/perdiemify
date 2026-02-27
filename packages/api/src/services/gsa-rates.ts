@@ -42,7 +42,7 @@ export async function fetchGSARates(
     throw new Error(`GSA API error: ${res.status} ${res.statusText}`);
   }
 
-  const data: GSARatesResponse = await res.json();
+  const data = await res.json() as GSARatesResponse;
 
   if (!data.rates || data.rates.length === 0) {
     return [];

@@ -34,7 +34,7 @@ async function getAccessToken(): Promise<string> {
     throw new Error(`Amadeus OAuth error ${res.status}: ${body}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as { access_token: string; expires_in: number };
   cachedToken = {
     token: data.access_token,
     expiresAt: Date.now() + data.expires_in * 1000,
@@ -54,7 +54,7 @@ async function amadeusGet<T>(path: string): Promise<T> {
     throw new Error(`Amadeus API error ${res.status}: ${body}`);
   }
 
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 // City code mapping for Amadeus (IATA codes)
