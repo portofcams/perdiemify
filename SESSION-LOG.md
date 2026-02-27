@@ -445,4 +445,130 @@ SESSION-LOG.md                         — This file
 ```
 
 ---
-*Last updated: Feb 27, 2026 — Session 4*
+
+## 2026-02-27 — Session 4b: Flights, Cars, Trips CRUD, Scraper, Loyalty
+
+### Phase 1 status update
+| Day | Task | Status |
+|-----|------|--------|
+| 1 | Scaffolding | Done |
+| 2 | Auth & Profiles (Clerk) | Done |
+| 3 | Per Diem Engine | Done |
+| 4 | Hotel Search (Amadeus) | Done |
+| 5 | Flights & Cars | **Done** (today) |
+| 6 | Affiliate Links | Back-burnered (requires 30+ min signup) |
+| 7 | Trips & Dashboard | **Done** (today) |
+| 8 | Payments (Stripe) | Done |
+| 9 | Discount Codes | **Done** (today) |
+| 10 | Loyalty Tracker | **Done** (today) |
+| 11 | Meal Tracker | Not started |
+| 12 | PWA | Not started |
+| 13 | Landing Page & SEO | Done |
+| 14 | Launch polish | Not started |
+
+### Completed work
+
+#### 1. Flight Search (Amadeus Flight Offers API)
+- Added `amadeusPost<T>()` helper in `packages/api/src/providers/amadeus.ts`
+- New types: `AmadeusFlightSegment`, `AmadeusFlightItinerary`, `AmadeusFlightOffer`, `FlightSearchResult`
+- `searchFlights()` — POST `/v2/shopping/flight-offers` with configurable origin/dest, one-way/round-trip
+- `searchAndEnrichFlights()` in `packages/api/src/services/search-aggregator.ts`
+  - Airline loyalty detection (Delta SkyMiles, United MileagePlus, AA AAdvantage, SW Rapid Rewards, JetBlue TrueBlue, Alaska Mileage Plan)
+  - ~5 miles/dollar estimation
+  - Duration formatting (ISO PT → human-readable)
+- Updated `POST /api/search/flights` route in `packages/api/src/routes/search.ts`
+- Frontend: added origin field for flights, removed "Coming Soon" banners, dynamic labels per search type
+
+#### 2. Car Rental Search (Curated Mock)
+- 6 car types (Economy → Minivan) from real providers (National, Hertz, Enterprise, Avis, Budget)
+- Realistic pricing ($38–$85/day), loyalty program detection
+- `POST /api/search/cars` route with per diem delta calculation
+
+#### 3. Trips CRUD API
+- Full REST in `packages/api/src/routes/trips.ts`:
+  - `GET /` — list all trips, ordered by start date desc
+  - `GET /:id` — single trip with ownership check
+  - `POST /` — create trip (validates required fields)
+  - `PATCH /:id` — update trip fields with ownership check
+  - `DELETE /:id` — delete trip with ownership check
+- All routes use `requireAuth` + internal user ID lookup from Clerk ID
+
+#### 4. Discount Code Scraper
+- Rewrote `packages/scraper/src/index.ts` — runs scrape job on startup + every 4 hours
+- Created `packages/scraper/src/scrapers.ts`:
+  - `scrapeGovTravelDiscounts()` — 6 curated gov/military codes (GOVRATE, FEDROOMS, MILGOV, USGOVT)
+  - `scrapeRetailMeNot()` — Cheerio-based scraping for Hotels.com, Expedia, Booking.com, Priceline
+  - `upsertCodes()` — INSERT with ON CONFLICT DO NOTHING
+  - `logScrapeRun()` — records to scraper_logs table
+- Created `packages/api/src/routes/deals.ts`:
+  - `GET /api/deals` — list active codes with optional provider/type filters, sorted by upvotes
+  - `POST /api/deals/:id/vote` — upvote/downvote a code
+
+#### 5. Loyalty Tracker API
+- Created `packages/api/src/routes/loyalty.ts`:
+  - `GET /api/loyalty/accounts` — list with enriched market valuations
+  - `POST /api/loyalty/accounts` — add/upsert (onConflictDoUpdate)
+  - `PATCH /api/loyalty/accounts/:id` — update points/status
+  - `DELETE /api/loyalty/accounts/:id` — remove account
+  - `GET /api/loyalty/valuations` — public market point values
+  - `GET /api/loyalty/summary` — total portfolio value across all programs
+- Registered `dealsRouter` and `loyaltyRouter` in `packages/api/src/index.ts`
+
+### DB tables created on Vultr
+- `discount_codes` — scraped/curated discount codes with upvote tracking
+- `loyalty_accounts` — user loyalty program accounts (points, status)
+- `loyalty_valuations` — market point values (seeded with 17 programs from TPG 2026)
+- `scraper_logs` — scraper run history
+
+### Bug fixes
+- `ResultCard.tsx` — `rates.nights` → `rates?.nights` (rates now optional for flights/cars)
+- `trips.ts` / `loyalty.ts` — `req.params.id` cast to `string` for Express v5 typing
+- Fixed DATABASE_URL password — actual Postgres password is `perdiemify_dev` (docker-compose default), not the .env value with `$` character issues
+- Restarted nginx after API container recreate to fix 502 errors
+
+### Deployment
+- Both `tsc --noEmit` type-checks pass (web + api)
+- Pushed to GitHub, pulled on Vultr, Docker rebuild
+- All 8 containers running
+- Endpoints verified:
+  - `/api/health` → 200
+  - `/api/deals` → 200 (6 curated codes)
+  - `/api/loyalty/valuations` → 200 (17 program valuations)
+  - Scraper ran successfully (gov codes + RetailMeNot)
+
+### New files created
+```
+packages/scraper/src/scrapers.ts              — Discount code scraper (gov + RetailMeNot)
+packages/api/src/routes/deals.ts              — Deals/discount code API
+packages/api/src/routes/loyalty.ts            — Loyalty tracker API
+```
+
+### Files modified
+```
+packages/api/src/providers/amadeus.ts         — Added flight search (POST v2)
+packages/api/src/services/search-aggregator.ts — Flight enrichment + airline loyalty
+packages/api/src/routes/search.ts             — Flight + car endpoints
+packages/api/src/routes/trips.ts              — Full CRUD (was placeholder)
+packages/api/src/index.ts                     — Registered deals + loyalty routes
+packages/scraper/src/index.ts                 — Real scraper with 4h interval
+apps/web/src/components/search/UnifiedSearchBar.tsx — Origin field, dynamic labels
+apps/web/src/app/search/page.tsx              — Multi-type search routing
+apps/web/src/components/results/ResultCard.tsx — Optional rates prop
+SESSION-LOG.md                                — This file
+```
+
+### Next session: pick up here
+- Day 6: Affiliate links (needs Travelpayouts/Booking.com/Kiwi signups — ~30 min user time)
+- Day 11: Meal tracker
+- Day 12: PWA
+- Day 14: Launch polish
+- Frontend pages for: deals/discounts, loyalty tracker, trip management
+- Dashboard wiring to real DB stats
+
+### All project files are at
+```
+/Users/johnthomas/Desktop/Perdiemify.com
+```
+
+---
+*Last updated: Feb 27, 2026 — Session 4b*
