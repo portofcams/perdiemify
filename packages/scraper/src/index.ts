@@ -4,7 +4,26 @@ import postgres from 'postgres';
 import { scrapeAllSources } from './scrapers';
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://perdiemify:perdiemify@localhost:5432/perdiemify';
-const client = postgres(connectionString, { max: 3, idle_timeout: 20 });
+
+function parseDbUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname,
+      port: parseInt(parsed.port || '5432'),
+      database: parsed.pathname.slice(1),
+      username: decodeURIComponent(parsed.username),
+      password: decodeURIComponent(parsed.password),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const parsed = parseDbUrl(connectionString);
+const client = parsed
+  ? postgres({ host: parsed.host, port: parsed.port, database: parsed.database, username: parsed.username, password: parsed.password, max: 3, idle_timeout: 20 })
+  : postgres(connectionString, { max: 3, idle_timeout: 20 });
 const db = drizzle(client);
 
 console.log('Perdiemify Scraper starting...');
