@@ -5,10 +5,18 @@ services:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+      args:
+        - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        - NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+        - NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+        - NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
+        - NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
+        - NEXT_PUBLIC_API_URL=http://perdiemify.com/api
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://api:3001
+      - NEXT_PUBLIC_API_URL=http://perdiemify.com/api
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     depends_on:
       - api
     restart: unless-stopped

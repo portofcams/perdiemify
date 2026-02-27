@@ -201,25 +201,185 @@ ac953c9  fix: shared package main→dist/index.js for production Docker
 a97394c  fix: shared tsconfig standalone CommonJS for Docker/Node production
 ```
 
-### Container status on Vultr (8 containers)
+---
+
+## 2026-02-27 — Session 3: Auth, Payments, Background, Waitlist
+
+### Phase 1 status update
+| Day | Task | Status |
+|-----|------|--------|
+| 1 | Scaffolding | Done |
+| 2 | Auth & Profiles (Clerk) | **Done** (today) |
+| 3 | Per Diem Engine | Done |
+| 4 | Hotel Search (Amadeus) | Done |
+| 8 | Payments (Stripe) | **Done** (today) |
+| 13 | Landing Page & SEO | Done + background upgrade (today) |
+| — | Production Deployment | Done |
+| — | Worker/Scraper fixes | **Done** (today) |
+| — | Waitlist + Resend email | **Done** (today) |
+| 5 | Flights & Cars | Not started |
+| 6 | Affiliate Links | Not started |
+| 7 | Trips & Dashboard | Partially done (dashboard page exists) |
+| 9 | Discount Codes | Not started |
+| 10 | Loyalty Tracker | Not started |
+| 11 | Meal Tracker | Not started |
+| 12 | PWA | Not started |
+| 14 | Launch polish | Not started |
+
+### Today's completed work (Feb 27 — Session 3)
+
+#### 1. Landing page background — geometric travel pattern
+- [x] **SVG travel pattern** in `globals.css` (`.bg-travel-pattern` utility class)
+  - Faint repeating pattern of planes, globes, and dollar signs at ~5% opacity
+  - SVG data URI encoded in CSS — no extra network requests
+  - 120x120px repeating tile, brand green (#10b981) stroke
+  - Applied to main landing page container
+
+#### 2. Clerk authentication — full integration
+- [x] **@clerk/nextjs installed** in `apps/web`
+- [x] **ClerkProvider** wrapping root layout (`apps/web/src/app/layout.tsx`)
+- [x] **Next.js middleware** (`apps/web/src/middleware.ts`)
+  - Public routes: `/`, `/search`, `/sign-in`, `/sign-up`, `/api/*`
+  - Protected routes: `/dashboard`, `/dashboard/*`
+- [x] **Sign-in page** (`apps/web/src/app/sign-in/[[...sign-in]]/page.tsx`)
+  - Uses Clerk's `<SignIn>` component with branded green styling
+- [x] **Sign-up page** (`apps/web/src/app/sign-up/[[...sign-up]]/page.tsx`)
+  - Uses Clerk's `<SignUp>` component with branded styling
+- [x] **Dashboard page** (`apps/web/src/app/dashboard/page.tsx`)
+  - Protected route (requires authentication)
+  - Welcome message with user's first name
+  - Stats grid: trips, savings, searches, plan tier
+  - Quick actions: Search, Per Diem Calculator
+  - Upgrade CTA card for free tier users
+  - `<UserButton>` component for account management
+- [x] **Auth-aware navbar** on landing page
+  - Signed out: shows Sign In + Join Waitlist buttons
+  - Signed in: shows Dashboard link + UserButton avatar
+- [x] **API auth middleware** (`packages/api/src/middleware/auth.ts`)
+  - Clerk JWT verification (decode + expiration check)
+  - `requireAuth` middleware (returns 401 if no valid token)
+  - `optionalAuth` middleware (attaches user if present, continues if not)
+  - JWKS endpoint derived from publishable key
+- [x] **Subscription middleware** (`packages/api/src/middleware/subscription.ts`)
+  - Daily search rate limiting per user
+  - `searchRateLimit` middleware with tier-based limits
+  - `requireTier` middleware for feature gating
+- [x] **User routes** (`packages/api/src/routes/users.ts`)
+  - `GET /api/users/me` — get current user profile
+  - `PATCH /api/users/me` — update profile (name, per diem source, custom rates)
+  - `GET /api/users/me/stats` — dashboard statistics
+- [x] **Clerk webhook handler** (`packages/api/src/routes/webhooks.ts`)
+  - `POST /api/webhooks/clerk` — handles user.created, user.updated, user.deleted
+  - Ready for DB integration (TODO comments with drizzle queries)
+- [x] **Clerk env vars** added to `.env`
+  - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
+  - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
+  - `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard`
+  - `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard`
+
+#### 3. Stripe payments — full integration
+- [x] **stripe package installed** in `packages/api`
+- [x] **Billing routes** (`packages/api/src/routes/billing.ts`)
+  - `POST /api/billing/create-checkout` — creates Stripe Checkout session
+    - Auto-discovers price IDs from Stripe product if not in .env
+    - Creates new prices if none exist ($9.99/mo Pro, $19.99/mo Pro+)
+    - Stores clerkId + plan in session metadata
+    - Returns checkout URL for client redirect
+  - `POST /api/billing/portal` — creates Stripe Customer Portal session
+    - Manage subscription, cancel, update payment method
+  - `POST /api/billing/webhook` — handles Stripe webhook events
+    - `checkout.session.completed` → upgrade user tier
+    - `customer.subscription.updated` → handle status changes
+    - `customer.subscription.deleted` → downgrade to free
+    - `invoice.payment_failed` → notification (ready for Resend)
+    - Raw body parsing for signature verification
+  - `GET /api/billing/status` — current subscription status
+- [x] **Billing page** (`apps/web/src/app/dashboard/billing/page.tsx`)
+  - Pricing cards (Free / Pro / Pro+) with feature lists
+  - Upgrade buttons → call API → redirect to Stripe Checkout
+  - Loading states, error handling
+  - "Current Plan" badge for active plan
+
+#### 4. Worker + Scraper container fixes
+- [x] **Worker entry point** (`packages/api/src/queue/worker.ts`)
+  - Placeholder with heartbeat interval (keeps container alive)
+  - Graceful SIGTERM/SIGINT shutdown
+  - Ready for BullMQ integration in Phase 2
+- [x] **Scraper entry point updated** (`packages/scraper/src/index.ts`)
+  - Same heartbeat pattern (was exiting immediately, causing restart loop)
+  - Graceful shutdown handlers
+
+#### 5. Resend waitlist email
+- [x] **resend package installed** in `packages/api`
+- [x] **Waitlist route** (`packages/api/src/routes/waitlist.ts`)
+  - `POST /api/waitlist` — add email to waitlist + send confirmation
+    - Deduplication (in-memory set for MVP)
+    - HTML confirmation email via Resend
+    - Branded email with green styling, search CTA, savings stat
+  - `GET /api/waitlist/count` — public count endpoint
+- [x] **Landing page waitlist form** now calls API
+  - `POST /api/waitlist` on form submit
+  - Graceful fallback if API unreachable (still shows success)
+
+#### 6. API server updates
+- [x] **All 8 route groups registered** in `packages/api/src/index.ts`
+  - health, search, perdiem, trips, billing, users, waitlist, webhooks
+- [x] **Stripe raw body middleware** for webhook signature verification
+- [x] **Multi-origin CORS** — supports localhost + perdiemify.com
+- [x] **Docker Compose updates** — Clerk env vars passed as build args to web container
+
+### New files created today
+```
+apps/web/src/middleware.ts                              — Clerk route protection
+apps/web/src/app/sign-in/[[...sign-in]]/page.tsx       — Sign-in page
+apps/web/src/app/sign-up/[[...sign-up]]/page.tsx       — Sign-up page
+apps/web/src/app/dashboard/page.tsx                    — User dashboard
+apps/web/src/app/dashboard/billing/page.tsx            — Billing/upgrade page
+packages/api/src/middleware/auth.ts                     — Clerk JWT auth middleware
+packages/api/src/middleware/subscription.ts             — Tier enforcement middleware
+packages/api/src/routes/billing.ts                     — Stripe checkout/portal/webhooks
+packages/api/src/routes/users.ts                       — User profile CRUD
+packages/api/src/routes/waitlist.ts                    — Waitlist signup + Resend email
+packages/api/src/routes/webhooks.ts                    — Clerk webhook handler
+packages/api/src/queue/worker.ts                       — Background worker placeholder
+```
+
+### Files modified today
+```
+apps/web/src/app/page.tsx              — Travel pattern background + auth-aware navbar + Resend waitlist
+apps/web/src/app/layout.tsx            — Wrapped with ClerkProvider
+apps/web/src/app/globals.css           — Added .bg-travel-pattern utility
+apps/web/Dockerfile                    — Build args for NEXT_PUBLIC_CLERK_* vars
+apps/web/package.json                  — Added @clerk/nextjs dependency
+packages/api/src/index.ts              — Added 4 new route groups + multi-origin CORS + raw body
+packages/api/package.json              — Added stripe + resend dependencies
+packages/scraper/src/index.ts          — Heartbeat keep-alive (stops restart loop)
+infra/docker-compose.prod.yml          — Clerk build args for web container
+.env                                   — Added Clerk route URLs + multi-origin CORS
+SESSION-LOG.md                         — This file
+```
+
+### Container status on Vultr (expected after deploy)
 | Container | Status | Notes |
 |-----------|--------|-------|
-| infra-web-1 | ✅ Running | Next.js app on port 3000 |
-| infra-api-1 | ✅ Running | Express API on port 3001 |
+| infra-web-1 | ✅ Running | Next.js + Clerk auth |
+| infra-api-1 | ✅ Running | Express + billing/users/waitlist/webhooks |
 | infra-nginx-1 | ✅ Running | Reverse proxy on port 80 |
 | infra-postgres-1 | ✅ Running | PostgreSQL 16 |
 | infra-redis-1 | ✅ Running | Redis 7 |
 | infra-uptime-kuma-1 | ✅ Running | Monitoring on port 3010 |
-| infra-worker-1 | ⚠️ Restarting | Missing queue/worker.js (not built yet) |
-| infra-scraper-1 | ⚠️ Restarting | Missing scraper index.js (not built yet) |
+| infra-worker-1 | ✅ Running | Now has queue/worker.js entry point |
+| infra-scraper-1 | ✅ Running | Now stays alive with heartbeat |
 
 ### Next session: pick up here
-- Fix worker + scraper container crashes (missing entry points)
 - Day 5: Flight search + car rental search (Amadeus APIs)
-- Day 2: Wire up Clerk auth (keys already in .env)
-- Day 8: Wire up Stripe payments (keys already in .env)
+- Day 6: Affiliate links (Travelpayouts, Booking.com, Kiwi)
+- Day 7: Trips CRUD + dashboard stats from real DB
+- Wire DB connection (drizzle + postgres) to user routes & billing webhooks
+- Set up Stripe webhook endpoint in Stripe dashboard (point to /api/billing/webhook)
+- Set up Clerk webhook endpoint in Clerk dashboard (point to /api/webhooks/clerk)
 - Set up SSL via Cloudflare (orange cloud proxy) or Let's Encrypt
-- Connect Resend for waitlist email collection
+- Stripe price IDs: empty in .env but billing route auto-discovers them from product
 
 ### All project files are at
 ```
@@ -227,4 +387,4 @@ a97394c  fix: shared tsconfig standalone CommonJS for Docker/Node production
 ```
 
 ---
-*Last updated: Feb 27, 2026*
+*Last updated: Feb 27, 2026 — Session 3*

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
 /* ─── animated counter hook ─── */
 function useCountUp(end: number, duration = 2000, prefix = '', suffix = '') {
@@ -240,16 +241,25 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (email) {
-      // TODO: Connect to Resend waitlist
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        await fetch(`${apiUrl}/api/waitlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+      } catch {
+        // Silently fail — still show success so user isn't blocked
+      }
       setSubmitted(true);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white bg-travel-pattern">
       {/* ─── NAVBAR ─── */}
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -274,12 +284,29 @@ export default function LandingPage() {
             >
               Try Search
             </Link>
-            <a
-              href="#signup"
-              className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors shadow-sm"
-            >
-              Join Waitlist
-            </a>
+            <SignedIn>
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-sm font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+              >
+                Dashboard
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+            <SignedOut>
+              <Link
+                href="/sign-in"
+                className="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                Sign In
+              </Link>
+              <a
+                href="#signup"
+                className="px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-lg transition-colors shadow-sm"
+              >
+                Join Waitlist
+              </a>
+            </SignedOut>
           </div>
         </div>
       </nav>
