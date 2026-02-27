@@ -11,6 +11,8 @@ import { billingRouter } from './routes/billing';
 import { usersRouter } from './routes/users';
 import { waitlistRouter } from './routes/waitlist';
 import { webhooksRouter } from './routes/webhooks';
+import { dealsRouter } from './routes/deals';
+import { loyaltyRouter } from './routes/loyalty';
 
 const app = express();
 const PORT = process.env.API_PORT || 3001;
@@ -38,6 +40,8 @@ app.use('/api/billing', billingRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/waitlist', waitlistRouter);
 app.use('/api/webhooks', webhooksRouter);
+app.use('/api/deals', dealsRouter);
+app.use('/api/loyalty', loyaltyRouter);
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -47,7 +51,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 app.listen(PORT, () => {
   console.log(`Perdiemify API running on port ${PORT}`);
-  console.log(`Routes: health, search, perdiem, trips, billing, users, waitlist, webhooks`);
+  console.log(`Routes: health, search, perdiem, trips, billing, users, waitlist, webhooks, deals, loyalty`);
 });
 
 export default app;

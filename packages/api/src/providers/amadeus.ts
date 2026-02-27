@@ -208,3 +208,193 @@ export async function searchHotels(params: SearchParams): Promise<HotelSearchRes
 
   return results;
 }
+
+// --- Amadeus Flight Search Types ---
+
+interface AmadeusFlightSegment {
+  departure: { iataCode: string; terminal?: string; at: string };
+  arrival: { iataCode: string; terminal?: string; at: string };
+  carrierCode: string;
+  number: string;
+  aircraft?: { code: string };
+  duration: string;
+  numberOfStops: number;
+}
+
+interface AmadeusFlightItinerary {
+  duration: string;
+  segments: AmadeusFlightSegment[];
+}
+
+interface AmadeusFlightOffer {
+  type: string;
+  id: string;
+  source: string;
+  numberOfBookableSeats: number;
+  itineraries: AmadeusFlightItinerary[];
+  price: {
+    currency: string;
+    total: string;
+    base: string;
+    grandTotal: string;
+  };
+  travelerPricings: Array<{
+    travelerId: string;
+    fareOption: string;
+    travelerType: string;
+    price: { currency: string; total: string };
+    fareDetailsBySegment: Array<{
+      segmentId: string;
+      cabin: string;
+      class: string;
+      brandedFare?: string;
+    }>;
+  }>;
+  validatingAirlineCodes: string[];
+}
+
+interface AmadeusFlightOffersResponse {
+  data: AmadeusFlightOffer[];
+  dictionaries?: {
+    carriers?: Record<string, string>;
+  };
+}
+
+export interface FlightSearchResult {
+  offerId: string;
+  totalPrice: number;
+  currency: string;
+  airline: string;
+  airlineCode: string;
+  outboundDuration: string;
+  outboundStops: number;
+  outboundDepartureTime: string;
+  outboundArrivalTime: string;
+  outboundSegments: Array<{
+    from: string;
+    to: string;
+    carrier: string;
+    flightNumber: string;
+    departureTime: string;
+    arrivalTime: string;
+  }>;
+  returnDuration: string | null;
+  returnStops: number | null;
+  cabin: string;
+  seatsLeft: number;
+}
+
+async function amadeusPost<T>(path: string, body: unknown): Promise<T> {
+  const token = await getAccessToken();
+  const res = await fetch(`${AMADEUS_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Amadeus API error ${res.status}: ${text}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+export async function searchFlights(params: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+  adults?: number;
+}): Promise<{ flights: FlightSearchResult[]; carriers: Record<string, string> }> {
+  const originCode = getCityCode(params.origin);
+  const destCode = getCityCode(params.destination);
+
+  if (!originCode) throw new Error(`No IATA code found for origin "${params.origin}"`);
+  if (!destCode) throw new Error(`No IATA code found for destination "${params.destination}"`);
+
+  const searchBody: Record<string, unknown> = {
+    currencyCode: 'USD',
+    originDestinations: [
+      {
+        id: '1',
+        originLocationCode: originCode,
+        destinationLocationCode: destCode,
+        departureDateTimeRange: { date: params.departureDate },
+      },
+    ],
+    travelers: [{ id: '1', travelerType: 'ADULT' }],
+    sources: ['GDS'],
+    searchCriteria: {
+      maxFlightOffers: 15,
+      flightFilters: {
+        cabinRestrictions: [
+          { cabin: 'ECONOMY', coverage: 'MOST_SEGMENTS', originDestinationIds: ['1'] },
+        ],
+      },
+    },
+  };
+
+  // Add return leg if round trip
+  if (params.returnDate) {
+    (searchBody.originDestinations as Array<Record<string, unknown>>).push({
+      id: '2',
+      originLocationCode: destCode,
+      destinationLocationCode: originCode,
+      departureDateTimeRange: { date: params.returnDate },
+    });
+    const cabinRestrictions = (searchBody.searchCriteria as Record<string, unknown>);
+    const filters = cabinRestrictions.flightFilters as Record<string, unknown>;
+    const restrictions = filters.cabinRestrictions as Array<Record<string, unknown>>;
+    restrictions[0].originDestinationIds = ['1', '2'];
+  }
+
+  const response = await amadeusPost<AmadeusFlightOffersResponse>(
+    '/v2/shopping/flight-offers',
+    searchBody,
+  );
+
+  const carriers = response.dictionaries?.carriers || {};
+  const flights: FlightSearchResult[] = [];
+
+  for (const offer of (response.data || [])) {
+    const outbound = offer.itineraries[0];
+    const returnItinerary = offer.itineraries[1] || null;
+
+    const airlineCode = offer.validatingAirlineCodes?.[0] || outbound.segments[0].carrierCode;
+    const airline = carriers[airlineCode] || airlineCode;
+
+    const cabin = offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin || 'ECONOMY';
+
+    flights.push({
+      offerId: offer.id,
+      totalPrice: parseFloat(offer.price.grandTotal),
+      currency: offer.price.currency || 'USD',
+      airline,
+      airlineCode,
+      outboundDuration: outbound.duration,
+      outboundStops: Math.max(0, outbound.segments.length - 1),
+      outboundDepartureTime: outbound.segments[0].departure.at,
+      outboundArrivalTime: outbound.segments[outbound.segments.length - 1].arrival.at,
+      outboundSegments: outbound.segments.map((s) => ({
+        from: s.departure.iataCode,
+        to: s.arrival.iataCode,
+        carrier: carriers[s.carrierCode] || s.carrierCode,
+        flightNumber: `${s.carrierCode}${s.number}`,
+        departureTime: s.departure.at,
+        arrivalTime: s.arrival.at,
+      })),
+      returnDuration: returnItinerary?.duration || null,
+      returnStops: returnItinerary ? Math.max(0, returnItinerary.segments.length - 1) : null,
+      cabin,
+      seatsLeft: offer.numberOfBookableSeats,
+    });
+  }
+
+  flights.sort((a, b) => a.totalPrice - b.totalPrice);
+
+  return { flights, carriers };
+}

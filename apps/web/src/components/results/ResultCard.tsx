@@ -4,7 +4,7 @@ import type { SearchResult, PerDiemRates } from '@/types';
 
 interface Props {
   result: SearchResult;
-  rates: PerDiemRates;
+  rates?: PerDiemRates;
   isSavingsMax?: boolean;
   isSmartValue?: boolean;
 }
@@ -38,7 +38,7 @@ function badgeLabel(badge: string) {
 const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 export function ResultCard({ result, rates, isSavingsMax, isSmartValue }: Props) {
-  const nightly = result.pricePerNight ?? Math.round(result.price / (rates.nights || 1));
+  const nightly = result.pricePerNight ?? Math.round(result.price / (rates?.nights || 1));
 
   return (
     <div

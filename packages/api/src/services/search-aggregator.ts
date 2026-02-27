@@ -1,5 +1,5 @@
 import type { SearchParams, SearchResult, SearchResponse, PerDiemRates } from '@perdiemify/shared';
-import { searchHotels, type HotelSearchResult } from '../providers/amadeus';
+import { searchHotels, searchFlights, type HotelSearchResult, type FlightSearchResult } from '../providers/amadeus';
 import { calculatePerDiem, getPerDiemBadge, calculateDelta } from './perdiem-calculator';
 
 function generateId(): string {
@@ -150,6 +150,107 @@ export async function searchAndEnrich(
     perDiemRates: perDiem,
     savingsMax,
     smartValue: smartValueFinal,
+    cached: false,
+    searchId: generateId(),
+  };
+}
+
+// --- Flight search ---
+
+function detectAirlineLoyalty(airline: string): string | null {
+  const lower = airline.toLowerCase();
+  if (lower.includes('delta')) return 'Delta SkyMiles';
+  if (lower.includes('united')) return 'United MileagePlus';
+  if (lower.includes('american')) return 'American AAdvantage';
+  if (lower.includes('southwest')) return 'Southwest Rapid Rewards';
+  if (lower.includes('jetblue')) return 'JetBlue TrueBlue';
+  if (lower.includes('alaska')) return 'Alaska Mileage Plan';
+  if (lower.includes('frontier') || lower.includes('spirit') || lower.includes('allegiant')) return null;
+  return null;
+}
+
+function estimateFlightMiles(airline: string, price: number): number | null {
+  const program = detectAirlineLoyalty(airline);
+  if (!program) return null;
+  // Rough: ~5 miles per dollar spent on base fares
+  return Math.round(price * 5);
+}
+
+function formatDuration(isoDuration: string): string {
+  // PT2H30M -> 2h 30m
+  const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if (!match) return isoDuration;
+  const h = match[1] ? `${match[1]}h` : '';
+  const m = match[2] ? ` ${match[2]}m` : '';
+  return `${h}${m}`.trim();
+}
+
+function enrichFlightResult(flight: FlightSearchResult, perDiem: PerDiemRates): SearchResult {
+  // For flights, per diem delta = total M&IE allowance - flight cost (conceptually: savings on transport)
+  // We compare flight cost against a reasonable budget (not lodging). Show delta as info only.
+  const delta = 0; // Flights don't have a per diem "rate" — delta shown as neutral
+  const stopsLabel = flight.outboundStops === 0 ? 'Nonstop' : `${flight.outboundStops} stop${flight.outboundStops > 1 ? 's' : ''}`;
+
+  return {
+    id: generateId(),
+    type: 'flight',
+    provider: 'amadeus',
+    providerName: flight.airline,
+    name: `${flight.airline} — ${stopsLabel}`,
+    description: `${formatDuration(flight.outboundDuration)}${flight.returnDuration ? ' | Return: ' + formatDuration(flight.returnDuration) : ' one-way'}`,
+    price: flight.totalPrice,
+    currency: flight.currency,
+    perDiemDelta: delta,
+    perDiemBadge: 'near', // Flights are informational, not rated against per diem lodging
+    affiliateLink: '',
+    imageUrl: null,
+    rating: null,
+    loyaltyProgram: detectAirlineLoyalty(flight.airline),
+    estimatedPoints: estimateFlightMiles(flight.airline, flight.totalPrice),
+    discountCodes: [],
+    amenities: [flight.cabin, stopsLabel, `${flight.seatsLeft} seats left`],
+    location: null,
+  };
+}
+
+export async function searchAndEnrichFlights(
+  params: SearchParams & { origin: string }
+): Promise<SearchResponse> {
+  const perDiem = await calculatePerDiem({
+    city: params.destination,
+    state: params.destinationState || 'DC',
+    checkIn: params.checkIn,
+    checkOut: params.checkOut,
+    perDiemSource: 'gsa',
+  });
+
+  let flightResults: FlightSearchResult[];
+  try {
+    const { flights } = await searchFlights({
+      origin: params.origin,
+      destination: params.destination,
+      departureDate: params.checkIn,
+      returnDate: params.checkOut,
+      adults: params.adults,
+    });
+    flightResults = flights;
+  } catch (err) {
+    console.error('Amadeus flight search failed:', err);
+    flightResults = [];
+  }
+
+  const results = flightResults.map((f) => enrichFlightResult(f, perDiem));
+
+  // For flights: cheapest = savingsMax, best nonstop = smartValue
+  const savingsMax = results.length > 0 ? results[0] : null; // already sorted by price
+  const nonstop = results.find((r) => r.amenities.includes('Nonstop'));
+  const smartValue = nonstop || results[1] || savingsMax;
+
+  return {
+    results,
+    perDiemRates: perDiem,
+    savingsMax,
+    smartValue: smartValue && savingsMax && smartValue.id === savingsMax.id ? (results[1] || smartValue) : smartValue,
     cached: false,
     searchId: generateId(),
   };

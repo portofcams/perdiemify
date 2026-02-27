@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import type { BookingType } from '@/types';
 
-interface SearchValues {
+export interface SearchValues {
   city: string;
   state: string;
+  origin: string;
   checkIn: string;
   checkOut: string;
   type: BookingType;
@@ -26,14 +27,18 @@ export function UnifiedSearchBar({ onSearch, loading }: Props) {
   const [type, setType] = useState<BookingType>('hotel');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+  const [origin, setOrigin] = useState('');
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!city || !checkIn || !checkOut) return;
-    onSearch({ city, state, checkIn, checkOut, type });
+    if (!city || !checkIn) return;
+    if (type !== 'flight' && !checkOut) return;
+    onSearch({ city, state, origin, checkIn, checkOut, type });
   };
+
+  const isFlightMode = type === 'flight';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -57,10 +62,27 @@ export function UnifiedSearchBar({ onSearch, loading }: Props) {
       </div>
 
       {/* Fields */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="lg:col-span-1">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isFlightMode ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-3`}>
+        {/* Origin — flights only */}
+        {isFlightMode && (
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              From
+            </label>
+            <input
+              type="text"
+              value={origin}
+              onChange={(e) => setOrigin(e.target.value)}
+              placeholder="Denver"
+              required
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
+            />
+          </div>
+        )}
+
+        <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            City
+            {isFlightMode ? 'To' : 'City'}
           </label>
           <input
             type="text"
@@ -72,23 +94,25 @@ export function UnifiedSearchBar({ onSearch, loading }: Props) {
           />
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            State
-          </label>
-          <input
-            type="text"
-            value={state}
-            onChange={(e) => setState(e.target.value.toUpperCase())}
-            placeholder="DC"
-            maxLength={2}
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm uppercase"
-          />
-        </div>
+        {!isFlightMode && (
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              State
+            </label>
+            <input
+              type="text"
+              value={state}
+              onChange={(e) => setState(e.target.value.toUpperCase())}
+              placeholder="DC"
+              maxLength={2}
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm uppercase"
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            Check In
+            {isFlightMode ? 'Depart' : 'Check In'}
           </label>
           <input
             type="date"
@@ -101,13 +125,13 @@ export function UnifiedSearchBar({ onSearch, loading }: Props) {
 
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            Check Out
+            {isFlightMode ? 'Return' : 'Check Out'}
           </label>
           <input
             type="date"
             value={checkOut}
             onChange={(e) => setCheckOut(e.target.value)}
-            required
+            required={!isFlightMode}
             className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
           />
         </div>
@@ -134,12 +158,6 @@ export function UnifiedSearchBar({ onSearch, loading }: Props) {
           </button>
         </div>
       </div>
-
-      {type !== 'hotel' && (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          {type === 'flight' ? 'Flight' : 'Car'} search is coming soon! Hotel search is available now.
-        </p>
-      )}
     </form>
   );
 }
