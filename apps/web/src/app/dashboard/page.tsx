@@ -76,6 +76,9 @@ export default function DashboardPage() {
             <Link href="/dashboard/loyalty" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors hidden sm:block">
               Loyalty
             </Link>
+            <Link href="/dashboard/analytics" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors hidden sm:block">
+              Analytics
+            </Link>
             <UserButton afterSignOutUrl="/" />
           </div>
         </div>

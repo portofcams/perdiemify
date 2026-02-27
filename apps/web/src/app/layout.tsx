@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -28,6 +29,16 @@ export const metadata: Metadata = {
     title: 'Perdiemify — Keep the Difference',
     description: 'Maximize your per diem allowances.',
   },
+  manifest: '/manifest.json',
+  icons: [
+    { url: '/icons/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+    { url: '/icons/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+  ],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Perdiemify',
+  },
 };
 
 export const viewport: Viewport = {
@@ -44,7 +55,10 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="min-h-screen font-sans">{children}</body>
+        <body className="min-h-screen font-sans">
+          {children}
+          <PWAInstallPrompt />
+        </body>
       </html>
     </ClerkProvider>
   );

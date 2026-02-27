@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { sql } from 'drizzle-orm';
 import { db } from '../db';
+import { sendDealAlerts } from '../services/deal-alerts';
 
 export const dealsRouter = Router();
 
@@ -57,5 +58,30 @@ dealsRouter.post('/:id/vote', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Vote error:', err);
     return res.status(500).json({ success: false, error: 'Failed to record vote' });
+  }
+});
+
+/**
+ * POST /api/deals/notify — Internal: trigger deal alert emails for new codes
+ * Called by the scraper after finding new deals.
+ * Protected by an internal API key.
+ */
+dealsRouter.post('/notify', async (req: Request, res: Response) => {
+  try {
+    const apiKey = req.headers['x-internal-key'];
+    if (apiKey !== (process.env.INTERNAL_API_KEY || 'perdiemify-internal')) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { deals } = req.body;
+    if (!deals || !Array.isArray(deals) || deals.length === 0) {
+      return res.json({ success: true, data: { sent: 0 } });
+    }
+
+    const sent = await sendDealAlerts(deals);
+    return res.json({ success: true, data: { sent, totalDeals: deals.length } });
+  } catch (err) {
+    console.error('Deal notify error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to send notifications' });
   }
 });
