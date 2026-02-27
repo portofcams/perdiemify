@@ -571,4 +571,100 @@ SESSION-LOG.md                                — This file
 ```
 
 ---
-*Last updated: Feb 27, 2026 — Session 4b*
+
+## 2026-02-27 — Session 5: Frontend Pages + Meal Tracker
+
+### Phase 1 status update
+| Day | Task | Status |
+|-----|------|--------|
+| 1 | Scaffolding | Done |
+| 2 | Auth & Profiles (Clerk) | Done |
+| 3 | Per Diem Engine | Done |
+| 4 | Hotel Search (Amadeus) | Done |
+| 5 | Flights & Cars | Done |
+| 6 | Affiliate Links | Back-burnered (requires 30+ min signup) |
+| 7 | Trips & Dashboard | **Done** (today — frontend) |
+| 8 | Payments (Stripe) | Done |
+| 9 | Discount Codes | **Done** (today — frontend) |
+| 10 | Loyalty Tracker | **Done** (today — frontend) |
+| 11 | Meal Tracker | **Done** (today) |
+| 12 | PWA | Not started |
+| 13 | Landing Page & SEO | Done |
+| 14 | Launch polish | Not started |
+
+### Completed work
+
+#### 1. Trips Management page (`/dashboard/trips`)
+- Full CRUD with modal form (create/edit trips)
+- Summary cards: active trips, total savings, all trips count
+- Trip cards: destination, dates, nights, per diem allowance, savings, status badge
+- Edit and delete buttons with ownership enforcement
+- US state dropdown, origin field, lodging/M&IE rate inputs
+
+#### 2. Deals/Discounts page (`/dashboard/deals`)
+- Filterable by category: All, Hotels, Flights, Cars, Universal
+- Discount code cards with click-to-copy functionality
+- Upvote/downvote system
+- Gov/military rates callout banner
+- Type badges (% Off, $ Off, Promo, Gov Rate)
+- Source and expiration info
+
+#### 3. Loyalty Tracker page (`/dashboard/loyalty`)
+- Portfolio summary: total value, total points/miles, program count
+- Green gradient portfolio value card
+- Accounts list with category icons (hotel/airline/car/credit card)
+- Add/edit modal with program dropdown per category
+- Market valuations table (17 programs, TPG 2026 values)
+- Status level, estimated value per account
+
+#### 4. Meal & M&IE Tracker (API + page)
+- **API** (`packages/api/src/routes/meals.ts`):
+  - `GET /api/meals?tripId=xxx` — list meals for a trip
+  - `GET /api/meals/summary?tripId=xxx` — spending vs allowance summary
+  - `POST /api/meals` — log a meal (with trip ownership check)
+  - `PATCH /api/meals/:id` — update a meal entry
+  - `DELETE /api/meals/:id` — delete a meal entry
+- **Frontend** (`/dashboard/meals`):
+  - Trip selector dropdown
+  - M&IE summary cards: rate/day, total allowance, spent, remaining
+  - Visual progress bar (green → amber → red)
+  - Daily breakdown table (date, spent, allowance, remaining, meal count)
+  - Log meal modal: date, type (breakfast/lunch/dinner/snack), amount, vendor, notes
+  - Meal log list with type badges and delete
+
+#### 5. Dashboard wired to real data
+- Fetches stats from `GET /api/users/me/stats` (total trips, savings, searches)
+- Nav links to Trips, Loyalty
+- Quick actions: Search, Manage Trips, Loyalty Tracker, Discount Codes, Meal Tracker, Calculator
+
+### New files created
+```
+apps/web/src/app/dashboard/trips/page.tsx     — Trip management page
+apps/web/src/app/dashboard/deals/page.tsx     — Deals/discounts page
+apps/web/src/app/dashboard/loyalty/page.tsx   — Loyalty tracker page
+apps/web/src/app/dashboard/meals/page.tsx     — Meal & M&IE tracker page
+packages/api/src/routes/meals.ts              — Meals CRUD API
+```
+
+### Files modified
+```
+apps/web/src/app/dashboard/page.tsx           — Real API stats + quick action links
+packages/api/src/index.ts                     — Registered meals route
+```
+
+### DB tables created
+- `meals` — meal expense tracking per trip per day
+
+### Deployment
+- Docker build fix: `--env-file .env` flag needed for Clerk publishable key
+- API container: rebuilt with meals route
+- Web container: rebuilt with all new pages
+- All 8 containers running, all endpoints verified
+
+### Next session: pick up here
+- Day 12: PWA (service worker, manifest, install prompt)
+- Day 14: Launch polish (SEO meta tags, OG images, error boundaries)
+- Day 6: Affiliate links (when user has API keys)
+
+---
+*Last updated: Feb 27, 2026 — Session 5*
