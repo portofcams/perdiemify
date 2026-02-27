@@ -371,15 +371,73 @@ SESSION-LOG.md                         — This file
 | infra-worker-1 | ✅ Running | Now has queue/worker.js entry point |
 | infra-scraper-1 | ✅ Running | Now stays alive with heartbeat |
 
+---
+
+## 2026-02-27 — Session 4: Calculator, Mobile Nav, 404, Skeletons, Drizzle DB
+
+### Completed work
+
+#### 1. Per Diem Calculator page (`/calculator`)
+- New standalone public page at `apps/web/src/app/calculator/page.tsx`
+- Form: city (text), state (dropdown), check-in, check-out dates
+- Calls `POST /api/perdiem/calculate` and shows full breakdown
+- Shows: lodging rate, M&IE rate, total lodging, total M&IE, total allowance
+- SEO content section (what is per diem, how savings work, first/last day rule)
+- CTA to search hotels in the calculated city
+- Added `/calculator(.*)` to Clerk middleware public routes
+
+#### 2. Mobile hamburger nav
+- Added hamburger toggle button (visible on `sm:hidden`)
+- Slide-out mobile menu panel with backdrop overlay
+- Includes all nav links: Features, How It Works, Pricing, Search, Calculator
+- Auth-aware: shows Dashboard (signed in) or Sign In/Sign Up/Join Waitlist (signed out)
+- Body scroll lock when menu is open
+- Close on backdrop click, close button, or link click
+
+#### 3. Custom 404 page
+- Created `apps/web/src/app/not-found.tsx`
+- Branded with Perdiemify logo and gradient
+- Friendly message ("Looks like this page went over budget")
+- Links to Home and Search
+
+#### 4. Loading states & skeletons
+- Created `apps/web/src/components/Skeleton.tsx` with reusable components:
+  - `Skeleton` — base animated pulse block
+  - `CardSkeleton` — dashboard stat card skeleton
+  - `SearchResultSkeleton` — search result card skeleton
+- Created `apps/web/src/app/search/loading.tsx` — full search page skeleton
+- Created `apps/web/src/app/dashboard/loading.tsx` — full dashboard skeleton
+
+#### 5. Drizzle ORM wired to Postgres
+- Created `packages/api/src/db/index.ts` — postgres.js + drizzle-orm connection
+- Rewrote `packages/api/src/routes/users.ts`:
+  - `GET /me` — reads user from DB (falls back to Clerk JWT data if not in DB)
+  - `PATCH /me` — updates user fields in DB
+  - `GET /me/stats` — aggregates trips/bookings/savings from DB
+- Rewrote `packages/api/src/routes/webhooks.ts`:
+  - `user.created` — inserts user into DB with `onConflictDoNothing`
+  - `user.updated` — updates email/name in DB
+  - `user.deleted` — deletes user from DB (cascade)
+- Created tables in production Postgres: `users`, `trips`, `bookings`
+
+### Deployment
+- Both `tsc --noEmit` type-checks pass (web + api)
+- Pushed to GitHub, pulled on Vultr
+- Docker rebuild (web + api), containers restarted
+- All 8 containers running, all endpoints verified:
+  - `/` → 200
+  - `/calculator` → 200
+  - `/api/health` → 200
+  - `/nonexistent` → 404 (custom page)
+
 ### Next session: pick up here
 - Day 5: Flight search + car rental search (Amadeus APIs)
 - Day 6: Affiliate links (Travelpayouts, Booking.com, Kiwi)
-- Day 7: Trips CRUD + dashboard stats from real DB
-- Wire DB connection (drizzle + postgres) to user routes & billing webhooks
-- Set up Stripe webhook endpoint in Stripe dashboard (point to /api/billing/webhook)
-- Set up Clerk webhook endpoint in Clerk dashboard (point to /api/webhooks/clerk)
-- Set up SSL via Cloudflare (orange cloud proxy) or Let's Encrypt
-- Stripe price IDs: empty in .env but billing route auto-discovers them from product
+- Day 7: Trips CRUD + real dashboard stats from DB
+- Manual TODO (for me):
+  1. Set Cloudflare SSL mode to "Flexible"
+  2. Set Stripe webhook URL: http://perdiemify.com/api/billing/webhook
+  3. Set Clerk webhook URL: http://perdiemify.com/api/webhooks/clerk
 
 ### All project files are at
 ```
@@ -387,4 +445,4 @@ SESSION-LOG.md                         — This file
 ```
 
 ---
-*Last updated: Feb 27, 2026 — Session 3*
+*Last updated: Feb 27, 2026 — Session 4*
