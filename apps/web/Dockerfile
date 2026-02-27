@@ -2,9 +2,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy root package files
-COPY package.json ./
-COPY packages/shared/package.json ./packages/shared/
+# Copy root package files + tsconfig
+COPY package.json tsconfig.json ./
+COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
 COPY apps/web/package.json ./apps/web/
 
 # Install dependencies
