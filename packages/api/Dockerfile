@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json tsconfig.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/api/package.json ./packages/api/
 
@@ -11,7 +11,7 @@ RUN npm install --workspace=packages/api --workspace=packages/shared
 COPY packages/shared/ ./packages/shared/
 COPY packages/api/ ./packages/api/
 
-RUN npm run build --workspace=packages/api
+RUN npm run build --workspace=packages/shared && npm run build --workspace=packages/api
 
 FROM node:20-alpine AS runner
 
