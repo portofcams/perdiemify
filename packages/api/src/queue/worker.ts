@@ -6,6 +6,11 @@ import { syncAllPerDiemRates, getCachedRateCount } from '../services/gsa-rate-sy
 import { sendDealAlerts } from '../services/deal-alerts';
 import { recalculateSuccessRates, expireStaleCode } from '../services/discount-engine';
 import { syncLoyaltyValuations } from '../services/loyalty-tracker';
+import { processReceiptImage, shutdownOcr } from '../services/receipt-ocr';
+import { getStorage } from '../utils/storage';
+import { receipts } from '../db/schema';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
 import { getCurrentFiscalYear } from '@perdiemify/shared';
 
 console.log('Perdiemify Worker starting...');
@@ -134,6 +139,60 @@ loyaltyValuationWorker.on('failed', (job, err) => {
   console.error(`[Worker] loyalty-valuations job ${job?.id} failed:`, err.message);
 });
 
+// --- Receipt OCR Worker ---
+
+const ocrWorker = new Worker(
+  'receipt-ocr',
+  async (job) => {
+    console.log(`[Worker] Processing receipt-ocr job: ${job.id}`);
+    const { receiptId, storageKey } = job.data;
+
+    try {
+      // Load image from storage
+      const storage = getStorage();
+      const imageBuffer = await storage.getBuffer(storageKey);
+
+      // Run OCR
+      const result = await processReceiptImage(imageBuffer);
+
+      // Update receipt record with extracted data
+      await db
+        .update(receipts)
+        .set({
+          ocrVendor: result.vendor,
+          ocrAmount: result.amount != null ? String(result.amount) : null,
+          ocrDate: result.date,
+          ocrCategory: result.category,
+          status: 'ready',
+        })
+        .where(eq(receipts.id, receiptId));
+
+      console.log(`[Worker] OCR complete for receipt ${receiptId}: vendor=${result.vendor}, amount=${result.amount}, confidence=${result.confidence}%`);
+      return result;
+    } catch (err) {
+      // Mark receipt as failed
+      await db
+        .update(receipts)
+        .set({ status: 'failed' })
+        .where(eq(receipts.id, receiptId))
+        .catch(() => {});
+      throw err;
+    }
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 2,
+  }
+);
+
+ocrWorker.on('completed', (job) => {
+  console.log(`[Worker] receipt-ocr job ${job.id} completed`);
+});
+
+ocrWorker.on('failed', (job, err) => {
+  console.error(`[Worker] receipt-ocr job ${job?.id} failed:`, err.message);
+});
+
 // --- Schedule repeatable jobs ---
 
 async function setupSchedules() {
@@ -207,8 +266,10 @@ async function shutdown(signal: string) {
     dealAlertsWorker.close(),
     discountValidationWorker.close(),
     loyaltyValuationWorker.close(),
+    ocrWorker.close(),
   ]);
 
+  await shutdownOcr();
   console.log('Worker shut down cleanly.');
   process.exit(0);
 }
@@ -216,4 +277,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log('Worker is running — processing perdiem-sync, deal-alerts, discount-validation, and loyalty-valuations jobs.');
+console.log('Worker is running — processing perdiem-sync, deal-alerts, discount-validation, loyalty-valuations, and receipt-ocr jobs.');

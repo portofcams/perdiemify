@@ -9,6 +9,8 @@ import { getQueueConnection } from './connection';
  *  - perdiem-sync        : Cache GSA per diem rates to DB (daily)
  *  - deal-alerts         : Send deal alert emails to Pro+ users
  *  - discount-validation : Recalculate success rates & expire stale codes (every 6h)
+ *  - loyalty-valuations  : Sync loyalty program valuations (weekly)
+ *  - receipt-ocr         : Process receipt images via Tesseract.js OCR
  */
 
 export const scraperQueue = new Queue('scraper', {
@@ -58,5 +60,15 @@ export const loyaltyValuationQueue = new Queue('loyalty-valuations', {
     backoff: { type: 'fixed', delay: 30_000 },
     removeOnComplete: { count: 10 },
     removeOnFail: { count: 20 },
+  },
+});
+
+export const ocrQueue = new Queue('receipt-ocr', {
+  connection: getQueueConnection(),
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 200 },
   },
 });

@@ -124,6 +124,8 @@ export const receipts = pgTable('receipts', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   tripId: uuid('trip_id').references(() => trips.id, { onDelete: 'set null' }),
   imageUrl: text('image_url').notNull(),
+  storageKey: text('storage_key'),
+  status: varchar('status', { length: 20 }).default('processing').notNull(),
   ocrVendor: varchar('ocr_vendor', { length: 255 }),
   ocrAmount: decimal('ocr_amount', { precision: 10, scale: 2 }),
   ocrDate: date('ocr_date'),
@@ -132,6 +134,7 @@ export const receipts = pgTable('receipts', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index('idx_receipts_user').on(table.userId),
+  index('idx_receipts_trip').on(table.tripId),
 ]);
 
 export const perdiemRates = pgTable('perdiem_rates', {
