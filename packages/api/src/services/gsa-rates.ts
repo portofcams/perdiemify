@@ -51,7 +51,7 @@ export async function fetchGSARates(
         and(
           eq(perdiemRates.fiscalYear, fiscalYear),
           eq(perdiemRates.state, state.toUpperCase()),
-          sql`LOWER(city) = LOWER(${city})`
+          sql`(LOWER(city) = LOWER(${city}) OR city ILIKE ${city + ' %'} OR city ILIKE ${'% / ' + city} OR city ILIKE ${'% / ' + city + ' %'})`
         )
       );
 
