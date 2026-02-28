@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { sql } from 'drizzle-orm';
 import { db } from '../db';
-import { sendDealAlerts } from '../services/deal-alerts';
+import { dealAlertsQueue } from '../queue/queues';
 
 export const dealsRouter = Router();
 
@@ -78,8 +78,9 @@ dealsRouter.post('/notify', async (req: Request, res: Response) => {
       return res.json({ success: true, data: { sent: 0 } });
     }
 
-    const sent = await sendDealAlerts(deals);
-    return res.json({ success: true, data: { sent, totalDeals: deals.length } });
+    // Enqueue deal alerts via BullMQ (processed by worker)
+    await dealAlertsQueue.add('deal-alert', { deals });
+    return res.json({ success: true, data: { queued: true, totalDeals: deals.length } });
   } catch (err) {
     console.error('Deal notify error:', err);
     return res.status(500).json({ success: false, error: 'Failed to send notifications' });

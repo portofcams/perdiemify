@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { fetchGSARates } from '../services/gsa-rates';
 import { calculatePerDiem } from '../services/perdiem-calculator';
+import { getCachedRateCount } from '../services/gsa-rate-sync';
+import { perdiemSyncQueue } from '../queue/queues';
 import { getCurrentFiscalYear } from '@perdiemify/shared';
 
 export const perdiemRouter = Router();
@@ -95,5 +97,47 @@ perdiemRouter.post('/calculate', async (req, res) => {
   } catch (err) {
     console.error('Per diem calculation error:', err);
     return res.status(500).json({ success: false, error: 'Failed to calculate per diem' });
+  }
+});
+
+// POST /api/perdiem/sync — Internal: trigger a full per diem rate sync
+perdiemRouter.post('/sync', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-internal-key'];
+    if (apiKey !== (process.env.INTERNAL_API_KEY || 'perdiemify-internal')) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const fiscalYear = req.body.fiscalYear || getCurrentFiscalYear();
+
+    await perdiemSyncQueue.add('manual-perdiem-sync', { fiscalYear });
+
+    return res.json({
+      success: true,
+      message: `Per diem sync job queued for FY${fiscalYear}`,
+    });
+  } catch (err) {
+    console.error('Per diem sync trigger error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to trigger sync' });
+  }
+});
+
+// GET /api/perdiem/cache-status — Check how many rates are cached
+perdiemRouter.get('/cache-status', async (req, res) => {
+  try {
+    const fiscalYear = req.query.year ? parseInt(req.query.year as string, 10) : getCurrentFiscalYear();
+    const count = await getCachedRateCount(fiscalYear);
+
+    return res.json({
+      success: true,
+      data: {
+        fiscalYear,
+        cachedRates: count,
+        isCached: count > 0,
+      },
+    });
+  } catch (err) {
+    console.error('Cache status error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to check cache status' });
   }
 });

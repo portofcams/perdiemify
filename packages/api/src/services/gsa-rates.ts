@@ -1,7 +1,9 @@
 import type { PerDiemRate } from '@perdiemify/shared';
-import { getCurrentFiscalYear } from '@perdiemify/shared';
+import { getCurrentFiscalYear, GSA_API_BASE } from '@perdiemify/shared';
+import { db } from '../db';
+import { perdiemRates } from '../db/schema';
+import { and, eq, sql } from 'drizzle-orm';
 
-const GSA_API_BASE = 'https://api.gsa.gov/travel/perdiem/v2';
 const API_KEY = process.env.GSA_API_KEY || 'DEMO_KEY';
 
 interface GSAMonth {
@@ -29,12 +31,49 @@ interface GSARatesResponse {
   }>;
 }
 
+/**
+ * Fetch per diem rates for a city/state — checks DB cache first,
+ * falls back to live GSA API if not cached.
+ */
 export async function fetchGSARates(
   city: string,
   state: string,
   year?: number
 ): Promise<PerDiemRate[]> {
   const fiscalYear = year || getCurrentFiscalYear();
+
+  // 1. Check DB cache first
+  try {
+    const cached = await db
+      .select()
+      .from(perdiemRates)
+      .where(
+        and(
+          eq(perdiemRates.fiscalYear, fiscalYear),
+          eq(perdiemRates.state, state.toUpperCase()),
+          sql`LOWER(city) = LOWER(${city})`
+        )
+      );
+
+    if (cached.length > 0) {
+      return cached.map((r) => ({
+        id: r.id,
+        fiscalYear: r.fiscalYear,
+        state: r.state,
+        city: r.city,
+        county: r.county,
+        lodgingRate: Number(r.lodgingRate),
+        mieRate: Number(r.mieRate),
+        month: r.month,
+        effectiveDate: r.effectiveDate,
+      }));
+    }
+  } catch (err) {
+    // DB cache miss is non-fatal — fall through to API
+    console.warn('DB rate cache lookup failed, falling back to GSA API:', err instanceof Error ? err.message : err);
+  }
+
+  // 2. Fall back to live GSA API
   const url = `${GSA_API_BASE}/rates/city/${encodeURIComponent(city)}/state/${encodeURIComponent(state)}/year/${fiscalYear}?api_key=${API_KEY}`;
 
   const res = await fetch(url);
@@ -52,7 +91,6 @@ export async function fetchGSARates(
 
   for (const rateGroup of data.rates) {
     for (const rate of rateGroup.rate) {
-      // Create a rate entry for each month (lodging varies by season)
       for (const month of rate.months.month) {
         results.push({
           id: '',
@@ -69,7 +107,33 @@ export async function fetchGSARates(
     }
   }
 
+  // 3. Cache results in DB for next time (fire-and-forget)
+  cacheRatesInDB(results).catch((err) => {
+    console.warn('Failed to cache GSA rates in DB:', err instanceof Error ? err.message : err);
+  });
+
   return results;
+}
+
+/**
+ * Cache individual rate lookup results in DB.
+ * Uses ON CONFLICT to avoid duplicates.
+ */
+async function cacheRatesInDB(rates: PerDiemRate[]): Promise<void> {
+  if (rates.length === 0) return;
+
+  for (const r of rates) {
+    try {
+      await db.execute(sql`
+        INSERT INTO perdiem_rates (id, fiscal_year, state, city, county, lodging_rate, mie_rate, month)
+        VALUES (gen_random_uuid(), ${r.fiscalYear}, ${r.state}, ${r.city}, ${r.county}, ${r.lodgingRate}, ${r.mieRate}, ${r.month})
+        ON CONFLICT (fiscal_year, state, city, county, month)
+        DO UPDATE SET lodging_rate = EXCLUDED.lodging_rate, mie_rate = EXCLUDED.mie_rate
+      `);
+    } catch {
+      // Ignore individual insert failures
+    }
+  }
 }
 
 export async function fetchGSARateForDate(
@@ -87,11 +151,9 @@ export async function fetchGSARateForDate(
   if (rates.length === 0) return null;
 
   // Find the best matching rate for this month
-  // Prefer exact city match, fall back to first result
   const monthRates = rates.filter((r) => r.month === month);
   if (monthRates.length === 0) return null;
 
-  // Return the first match (most specific city match from GSA)
   const rate = monthRates[0];
   return rate ? {
     lodgingRate: rate.lodgingRate,
@@ -101,7 +163,6 @@ export async function fetchGSARateForDate(
 
 // Fetch all states for autocomplete
 export async function fetchGSAStates(): Promise<string[]> {
-  // US state abbreviations — hardcoded since GSA doesn't have a states endpoint
   return [
     'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL',
     'GA','HI','ID','IL','IN','IA','KS','KY','LA','ME',

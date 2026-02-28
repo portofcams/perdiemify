@@ -789,4 +789,85 @@ packages/scraper/src/scrapers.ts                — BaseScraper + 4 scrapers
 - [ ] Sign up for affiliate programs (Travelpayouts, Booking.com, Kiwi)
 
 ---
-*Last updated: Feb 27, 2026 — Session 5b*
+
+## 2026-02-27 — Session 6: Drizzle ORM Wiring, Deep Audit, Production Fixes
+
+### Summary
+Wired all remaining API routes to Drizzle ORM + Postgres, ran a comprehensive production audit, and fixed multiple critical issues discovered during the audit.
+
+### Completed work
+
+#### 1. Drizzle ORM — remaining routes wired to Postgres
+- **`packages/api/src/routes/billing.ts`** — Complete rewrite (5 TODO stubs → real DB queries):
+  - `POST /billing/create-checkout`: Checks for existing `stripeCustomerId` in DB before creating checkout
+  - `POST /billing/portal`: Looks up `stripeCustomerId` from DB (was listing all Stripe customers)
+  - Webhook `checkout.session.completed`: Updates user's `subscriptionTier`, `stripeCustomerId`, `stripeSubscriptionId`
+  - Webhook `customer.subscription.updated`: Syncs tier based on Stripe price ID
+  - Webhook `customer.subscription.deleted`: Downgrades to free tier
+  - `GET /billing/status`: Returns real subscription data from DB + live Stripe period end
+  - **Stripe v20 fix**: `current_period_end` moved from `Subscription` to `SubscriptionItem` in Stripe SDK v20 — accessed via `sub.items?.data?.[0]?.current_period_end`
+- **`packages/api/src/routes/waitlist.ts`** — Replaced in-memory `Set<string>` with DB queries using `waitlistEmails` table
+- **`packages/api/src/routes/health.ts`** — Added Postgres health check with latency measurement (`SELECT 1`)
+- **`packages/api/drizzle.config.ts`** — Added `import 'dotenv/config'` + `verbose: true` + `strict: true`
+
+#### 2. New DB table
+- **`waitlistEmails`** added to `packages/api/src/db/schema.ts`:
+  - `id` (UUID), `email` (unique), `source` (default 'website'), `createdAt`
+
+#### 3. Deep production audit — 9 API endpoints + 6 web pages
+**Passing (before fixes):**
+- 9/9 API endpoints responding correctly
+- 5/6 web pages working (/, /search, /calculator, /sign-in, /sign-up)
+- DB: 12ms latency, all connections healthy
+
+**Issues found and fixed:**
+1. **manifest.json, robots.txt, sitemap.xml → 404**: Clerk middleware matcher regex didn't exclude `.json`, `.txt`, `.xml` files
+   - **Fix**: Updated matcher in `apps/web/src/middleware.ts` to add `|json|txt|xml` to exclusion pattern
+2. **OG image meta tags → `http://localhost:3000`**: Missing `metadataBase` in layout.tsx
+   - **Fix**: Added `metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://perdiemify.com')` to `apps/web/src/app/layout.tsx`
+3. **3 missing DB tables**: Schema defined 12 tables but only 9 existed in Postgres
+   - **Fix**: Created `receipts`, `perdiem_rates`, `featured_listings` tables directly via SQL on server
+4. **Missing index**: `idx_discount_codes_expires` defined in schema but not in DB
+   - **Fix**: Created via `CREATE INDEX IF NOT EXISTS idx_discount_codes_expires ON discount_codes(expires_at)`
+
+**Known issues (require user action — vendor dashboards):**
+- `/dashboard` returns 404 — Clerk `pk_test_*` key causes `dev-browser-missing` error in production (needs `pk_live_*` key)
+- Hotel search returns empty results — Amadeus test credentials (needs production API keys)
+- Cloudflare SSL still not set to "Flexible" (causes 521 on https://perdiemify.com)
+
+#### 4. Deployment
+- Committed: `74c66f8 feat: wire Drizzle ORM to all remaining routes`
+- Committed: `1640d3d fix: middleware matcher blocks static files + OG images use localhost`
+- Docker rebuild required `export $(grep -v "^#" .env | xargs)` before `docker compose build` (CLERK key missing otherwise)
+- Created `waitlist_emails` table in production Postgres
+- All 8 containers running, all fixes verified
+
+### Files modified
+```
+packages/api/drizzle.config.ts          — dotenv import + verbose/strict
+packages/api/src/db/schema.ts           — Added waitlistEmails table
+packages/api/src/routes/billing.ts      — Full Drizzle rewrite (5 TODOs → real queries)
+packages/api/src/routes/health.ts       — DB health check with latency
+packages/api/src/routes/waitlist.ts     — DB-backed (was in-memory Set)
+apps/web/src/middleware.ts              — Fixed matcher regex (.json/.txt/.xml)
+apps/web/src/app/layout.tsx             — Added metadataBase for OG images
+```
+
+### Production state after session
+- 8/8 Docker containers running
+- 12/12 DB tables with 29+ indexes
+- All API endpoints responding correctly
+- DB health: 12ms latency
+- PWA: manifest.json ✅, sw.js ✅
+- SEO: robots.txt ✅, sitemap.xml ✅, OG images → perdiemify.com ✅
+- `/dashboard` 404 (needs Clerk pk_live_ key — user task)
+
+### User homework (still pending from previous sessions)
+- [ ] Get Clerk `pk_live_*` production key → update `.env` → rebuild web container
+- [ ] Set Cloudflare SSL mode to "Flexible"
+- [ ] Set Stripe webhook URL: http://perdiemify.com/api/billing/webhook
+- [ ] Set Clerk webhook URL: http://perdiemify.com/api/webhooks/clerk
+- [ ] Verify Amadeus API keys are production-grade (test keys return empty results)
+
+---
+*Last updated: Feb 27, 2026 — Session 6*
