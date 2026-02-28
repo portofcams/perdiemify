@@ -3,6 +3,14 @@ import { eq, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
 import { db } from '../db';
 import { users, loyaltyAccounts, loyaltyValuations } from '../db/schema';
+import {
+  recommendCreditCard,
+  estimatePointsEarned,
+  getStatusProgress,
+  getProgramDetails,
+  syncLoyaltyValuations,
+  PROGRAM_VALUATIONS,
+} from '../services/loyalty-tracker';
 
 export const loyaltyRouter = Router();
 
@@ -234,5 +242,139 @@ loyaltyRouter.get('/summary', requireAuth, async (req: Request, res: Response) =
   } catch (err) {
     console.error('Get loyalty summary error:', err);
     return res.status(500).json({ success: false, error: 'Failed to fetch loyalty summary' });
+  }
+});
+
+/**
+ * POST /api/loyalty/recommend — Credit card recommendation for a booking
+ * Body: { bookingType: 'hotel'|'flight'|'car', provider: string, amountUsd: number }
+ */
+loyaltyRouter.post('/recommend', async (req: Request, res: Response) => {
+  try {
+    const { bookingType, provider, amountUsd } = req.body;
+
+    if (!bookingType || !provider || !amountUsd) {
+      return res.status(400).json({ success: false, error: 'bookingType, provider, and amountUsd are required' });
+    }
+
+    const recommendations = recommendCreditCard(bookingType, provider, amountUsd);
+    return res.json({ success: true, data: recommendations });
+  } catch (err) {
+    console.error('Credit card recommendation error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate recommendations' });
+  }
+});
+
+/**
+ * GET /api/loyalty/estimate — Estimate points earned for a booking
+ * Query: ?program=Marriott+Bonvoy&amount=150&status=Gold
+ */
+loyaltyRouter.get('/estimate', async (req: Request, res: Response) => {
+  try {
+    const program = req.query.program as string;
+    const amount = parseFloat(req.query.amount as string);
+    const status = req.query.status as string | undefined;
+
+    if (!program || isNaN(amount)) {
+      return res.status(400).json({ success: false, error: 'program and amount are required' });
+    }
+
+    const estimate = estimatePointsEarned(program, amount, status);
+    return res.json({
+      success: true,
+      data: {
+        programName: program,
+        amountUsd: amount,
+        statusLevel: status || null,
+        pointsEarned: estimate.points,
+        estimatedValueCents: estimate.valueCents,
+        estimatedValueUsd: Math.round(estimate.valueCents) / 100,
+      },
+    });
+  } catch (err) {
+    console.error('Estimate points error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to estimate points' });
+  }
+});
+
+/**
+ * GET /api/loyalty/programs/:name — Get full program details (tiers, partners, etc.)
+ */
+loyaltyRouter.get('/programs/:name', async (req: Request, res: Response) => {
+  try {
+    const name = decodeURIComponent(req.params.name as string);
+    const program = getProgramDetails(name);
+
+    if (!program) {
+      return res.status(404).json({ success: false, error: 'Program not found' });
+    }
+
+    return res.json({ success: true, data: program });
+  } catch (err) {
+    console.error('Get program details error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch program details' });
+  }
+});
+
+/**
+ * GET /api/loyalty/programs — List all program details
+ */
+loyaltyRouter.get('/programs', async (_req: Request, res: Response) => {
+  try {
+    return res.json({ success: true, data: PROGRAM_VALUATIONS });
+  } catch (err) {
+    console.error('List programs error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to list programs' });
+  }
+});
+
+/**
+ * GET /api/loyalty/status/:id — Get elite status progress for an account
+ */
+loyaltyRouter.get('/status/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserId(req.auth!.userId);
+    if (!userId) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const [account] = await db
+      .select()
+      .from(loyaltyAccounts)
+      .where(eq(loyaltyAccounts.id, req.params.id as string))
+      .limit(1);
+
+    if (!account || account.userId !== userId) {
+      return res.status(404).json({ success: false, error: 'Account not found' });
+    }
+
+    const progress = getStatusProgress(
+      account.programName,
+      account.statusLevel,
+      account.statusProgress
+    );
+
+    return res.json({ success: true, data: progress });
+  } catch (err) {
+    console.error('Get status progress error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch status progress' });
+  }
+});
+
+/**
+ * POST /api/loyalty/sync-valuations — Internal: refresh valuations data
+ */
+loyaltyRouter.post('/sync-valuations', async (req: Request, res: Response) => {
+  try {
+    const apiKey = req.headers['x-internal-key'];
+    if (apiKey !== (process.env.INTERNAL_API_KEY || 'perdiemify-internal')) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const result = await syncLoyaltyValuations();
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Sync valuations error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to sync valuations' });
   }
 });

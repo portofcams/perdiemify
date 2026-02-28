@@ -1,10 +1,11 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { createWorkerConnection } from './connection';
-import { perdiemSyncQueue, discountValidationQueue } from './queues';
+import { perdiemSyncQueue, discountValidationQueue, loyaltyValuationQueue } from './queues';
 import { syncAllPerDiemRates, getCachedRateCount } from '../services/gsa-rate-sync';
 import { sendDealAlerts } from '../services/deal-alerts';
 import { recalculateSuccessRates, expireStaleCode } from '../services/discount-engine';
+import { syncLoyaltyValuations } from '../services/loyalty-tracker';
 import { getCurrentFiscalYear } from '@perdiemify/shared';
 
 console.log('Perdiemify Worker starting...');
@@ -77,7 +78,6 @@ dealAlertsWorker.on('failed', (job, err) => {
 });
 
 // --- Discount Validation Worker ---
-// Recalculates success_rate from community votes, auto-expires low-rated codes
 
 const discountValidationWorker = new Worker(
   'discount-validation',
@@ -107,6 +107,33 @@ discountValidationWorker.on('failed', (job, err) => {
   console.error(`[Worker] discount-validation job ${job?.id} failed:`, err.message);
 });
 
+// --- Loyalty Valuations Sync Worker ---
+// Syncs curated point valuation data to loyalty_valuations table
+
+const loyaltyValuationWorker = new Worker(
+  'loyalty-valuations',
+  async (job) => {
+    console.log(`[Worker] Processing loyalty-valuations job: ${job.id}`);
+
+    const result = await syncLoyaltyValuations();
+
+    console.log(`[Worker] Loyalty valuations synced: ${result.synced} programs`);
+    return result;
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 1,
+  }
+);
+
+loyaltyValuationWorker.on('completed', (job) => {
+  console.log(`[Worker] loyalty-valuations job ${job.id} completed`);
+});
+
+loyaltyValuationWorker.on('failed', (job, err) => {
+  console.error(`[Worker] loyalty-valuations job ${job?.id} failed:`, err.message);
+});
+
 // --- Schedule repeatable jobs ---
 
 async function setupSchedules() {
@@ -132,6 +159,21 @@ async function setupSchedules() {
       }
     );
     console.log('[Worker] Scheduled: discount-validation (every 6 hours)');
+
+    // Loyalty valuations sync: run weekly on Sundays at 3 AM UTC
+    await loyaltyValuationQueue.upsertJobScheduler(
+      'weekly-loyalty-valuations',
+      { pattern: '0 3 * * 0' }, // Sunday 3 AM
+      {
+        name: 'weekly-loyalty-valuations',
+        data: {},
+      }
+    );
+    console.log('[Worker] Scheduled: loyalty-valuations (weekly Sunday 3 AM UTC)');
+
+    // Trigger initial loyalty valuation sync
+    await loyaltyValuationQueue.add('initial-loyalty-valuations', {});
+    console.log('[Worker] Triggered initial loyalty valuations sync');
 
     // Check if rates need initial sync (table is empty)
     const rateCount = await getCachedRateCount();
@@ -164,6 +206,7 @@ async function shutdown(signal: string) {
     perdiemWorker.close(),
     dealAlertsWorker.close(),
     discountValidationWorker.close(),
+    loyaltyValuationWorker.close(),
   ]);
 
   console.log('Worker shut down cleanly.');
@@ -173,4 +216,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log('Worker is running — processing perdiem-sync, deal-alerts, and discount-validation jobs.');
+console.log('Worker is running — processing perdiem-sync, deal-alerts, discount-validation, and loyalty-valuations jobs.');

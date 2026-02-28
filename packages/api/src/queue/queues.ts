@@ -50,3 +50,13 @@ export const discountValidationQueue = new Queue('discount-validation', {
     removeOnFail: { count: 30 },
   },
 });
+
+export const loyaltyValuationQueue = new Queue('loyalty-valuations', {
+  connection: getQueueConnection(),
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 30_000 },
+    removeOnComplete: { count: 10 },
+    removeOnFail: { count: 20 },
+  },
+});
