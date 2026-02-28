@@ -870,4 +870,85 @@ apps/web/src/app/layout.tsx             — Added metadataBase for OG images
 - [ ] Verify Amadeus API keys are production-grade (test keys return empty results)
 
 ---
-*Last updated: Feb 27, 2026 — Session 6*
+
+## 2026-02-28 — Session 7: Clerk Production + Phase 2 Discount Engine
+
+### Production Infrastructure Completed
+- **Clerk production keys** deployed: `pk_live_*` / `sk_live_*` via DNS approach (`clerk.perdiemify.com` CNAME)
+- **Cloudflare SSL** confirmed working (Flexible mode)
+- `https://perdiemify.com/api/health` → 200 ✅
+- `/sign-in` → 200 with Clerk auth headers ✅
+- `/dashboard` → Clerk middleware protecting (redirects unsigned users) ✅
+- **Redis eviction policy** fixed: `noeviction` (was `allkeys-lru`), persisted in docker-compose
+- **NEXT_PUBLIC_API_URL** fixed: `https://` (was `http://`)
+
+### Phase 2: Discount Engine — Built & Deployed
+
+#### New Service: `discount-engine.ts`
+- **Validation scoring**: `recalculateSuccessRates()` — computes success_rate from upvotes/downvotes
+  - Codes with 3+ votes: `success_rate = upvotes / (upvotes + downvotes)`
+  - Codes with < 3 votes: neutral 0.50 score
+  - Codes with 60%+ rate → `is_validated = true`
+- **Auto-expire stale codes**: Codes with 5+ votes and < 20% success → auto-expired
+- **Scraper health monitoring**: Aggregated stats per source (runs, avg codes, error rate, consecutive failures)
+- **Circuit breaker state**: 5+ consecutive failures → tripped (API-queryable)
+- **Deal stats**: Total active, validated count, by-category breakdown, top providers
+
+#### Enhanced Deals API (`deals.ts`)
+- `GET /api/deals` — Full-text search (`?search=`), sort (`?sort=upvotes|newest|success_rate`), pagination (`?page=&limit=`), verified filter (`?verified=true`)
+- `POST /api/deals/submit` — Community code submission (requires Clerk auth)
+  - Validates code format, deduplicates, links to user
+- `GET /api/deals/stats` — Deal statistics
+- `GET /api/deals/scraper-health` — Scraper health + circuit breaker state
+- `POST /api/deals/validate` — Internal: recalculate rates & expire stale codes
+
+#### Community Submissions (Frontend)
+- **Submit Code modal** on `/dashboard/deals` with:
+  - Code, provider, type (percent/fixed/promo), value, category, description fields
+  - Clerk auth integration (Bearer token)
+  - Duplicate detection, validation errors
+- **Enhanced deals page**:
+  - Search bar with full-text search
+  - Sort dropdown (Popular / Newest / Highest Rated)
+  - "Verified only" checkbox filter
+  - Pagination controls
+  - Verified badge, community badge, success rate display
+  - Results count
+
+#### Scraper Improvements
+- **FlyerTalk scraper** added (hotel + flight deal forums)
+- **Circuit breaker**: In-memory state per scraper source
+  - 5 consecutive failures → tripped (skip for 2h cooldown)
+  - Auto-reset after 2h
+  - Logged to `scraper_logs` with status='skipped'
+- **HTTP 429 handling**: Exponential backoff on rate limits
+- **Auto-notify**: After scrape, if new codes found → POST to `/api/deals/notify` → BullMQ → email alerts to Pro+ users
+
+#### Worker Updates
+- **3 BullMQ workers**: perdiem-sync, deal-alerts, discount-validation
+- **New cron**: `discount-validation` every 6 hours (recalculate success rates, expire stale)
+- Initial success_rate set to 0.50 for new codes
+
+### Commits
+- `b43a190` — feat: Phase 2 Discount Engine — validation, community submissions, circuit breaker
+
+### Production State (8/8 containers running)
+- API: ✅ healthy (12ms DB latency)
+- Worker: ✅ 3 scheduled jobs (perdiem-sync daily 2AM, discount-validation 6h, deal-alerts on-demand)
+- Scraper: ✅ 5 sources (gov-curated, retailmenot, hotel-chain, slickdeals, flyertalk)
+- Redis: ✅ noeviction policy
+- 804 cached per diem rates (6 states)
+- 17 active discount codes
+- Clerk production auth working via DNS (`clerk.perdiemify.com`)
+- SSL: Cloudflare Flexible ✅
+
+### Remaining for Full Phase 2 Completion
+- [ ] Stripe webhook URL: `https://perdiemify.com/api/billing/webhook`
+- [ ] Clerk webhook URL: `https://perdiemify.com/api/webhooks/clerk`
+- [ ] Amadeus production API keys (test keys return empty results)
+- [ ] More scraper sources (GovX/ID.me, more coupon sites)
+- [ ] Scraper health dashboard UI page
+- [ ] Test Clerk auth flow end-to-end (sign up → dashboard → submit code)
+
+---
+*Last updated: Feb 28, 2026 — Session 7*
