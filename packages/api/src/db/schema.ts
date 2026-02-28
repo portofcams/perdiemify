@@ -188,3 +188,10 @@ export const scraperLogs = pgTable('scraper_logs', {
   errorMessage: text('error_message'),
   runAt: timestamp('run_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const waitlistEmails = pgTable('waitlist_emails', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).unique().notNull(),
+  source: varchar('source', { length: 50 }).default('website').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});

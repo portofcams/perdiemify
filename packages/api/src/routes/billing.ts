@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { eq } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { db } from '../db';
+import { users } from '../db/schema';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2025-01-27.acacia' as Stripe.LatestApiVersion,
@@ -69,13 +72,19 @@ billingRouter.post('/create-checkout', requireAuth, async (req: Request, res: Re
       }
     }
 
+    // Check if user already has a Stripe customer ID in DB
+    const [user] = await db
+      .select({ stripeCustomerId: users.stripeCustomerId })
+      .from(users)
+      .where(eq(users.clerkId, clerkId))
+      .limit(1);
+
     const origin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
-      customer_email: email,
       client_reference_id: clerkId,
       metadata: {
         clerkId,
@@ -83,7 +92,16 @@ billingRouter.post('/create-checkout', requireAuth, async (req: Request, res: Re
       },
       success_url: `${origin}/dashboard?upgraded=true`,
       cancel_url: `${origin}/dashboard/billing?cancelled=true`,
-    });
+    };
+
+    // If we have a Stripe customer ID, use it; otherwise use email
+    if (user?.stripeCustomerId) {
+      sessionConfig.customer = user.stripeCustomerId;
+    } else {
+      sessionConfig.customer_email = email;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return res.json({
       success: true,
@@ -107,18 +125,16 @@ billingRouter.post('/portal', requireAuth, async (req: Request, res: Response) =
   try {
     const clerkId = req.auth!.userId;
 
-    // TODO: Look up stripeCustomerId from DB
-    // const user = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-    // const customerId = user[0]?.stripeCustomerId;
+    // Look up stripeCustomerId from DB
+    const [user] = await db
+      .select({ stripeCustomerId: users.stripeCustomerId })
+      .from(users)
+      .where(eq(users.clerkId, clerkId))
+      .limit(1);
 
-    // For MVP, search by metadata
-    const customers = await stripe.customers.list({
-      limit: 1,
-      // email lookup as fallback
-    });
+    const customerId = user?.stripeCustomerId;
 
-    // If no customer found, redirect to checkout instead
-    if (customers.data.length === 0) {
+    if (!customerId) {
       return res.status(404).json({
         success: false,
         error: 'No active subscription found. Please subscribe first.',
@@ -129,7 +145,7 @@ billingRouter.post('/portal', requireAuth, async (req: Request, res: Response) =
     const origin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customers.data[0].id,
+      customer: customerId,
       return_url: `${origin}/dashboard`,
     });
 
@@ -185,15 +201,19 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
 
       console.log(`Checkout completed: ${clerkId} → ${plan} plan`);
 
-      // TODO: Update user's subscription in DB
-      // await db.update(users)
-      //   .set({
-      //     subscriptionTier: plan as SubscriptionTier,
-      //     stripeCustomerId: session.customer as string,
-      //     stripeSubscriptionId: session.subscription as string,
-      //     updatedAt: new Date(),
-      //   })
-      //   .where(eq(users.clerkId, clerkId!));
+      if (clerkId) {
+        await db
+          .update(users)
+          .set({
+            subscriptionTier: plan,
+            stripeCustomerId: session.customer as string,
+            stripeSubscriptionId: session.subscription as string,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.clerkId, clerkId));
+
+        console.log(`DB updated: ${clerkId} → tier=${plan}, customer=${session.customer}`);
+      }
 
       break;
     }
@@ -204,8 +224,26 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
 
       console.log(`Subscription updated: ${subscription.id} → status: ${status}`);
 
-      // TODO: Update subscription status in DB
-      // Handle downgrade, upgrade, past_due, etc.
+      // Map Stripe status to our tier logic
+      if (status === 'active' || status === 'trialing') {
+        // Subscription is healthy — ensure tier matches the plan
+        const priceId = subscription.items.data[0]?.price?.id;
+        let tier = 'pro';
+        if (priceId === process.env.STRIPE_PROPLUS_PRICE_ID) {
+          tier = 'proplus';
+        }
+
+        await db
+          .update(users)
+          .set({ subscriptionTier: tier, updatedAt: new Date() })
+          .where(eq(users.stripeSubscriptionId, subscription.id));
+
+        console.log(`DB tier updated for subscription ${subscription.id} → ${tier}`);
+      } else if (status === 'past_due' || status === 'unpaid') {
+        // Keep the tier for now but log the issue
+        console.warn(`Subscription ${subscription.id} is ${status} — user still has access but needs to pay`);
+      }
+
       break;
     }
 
@@ -214,10 +252,17 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
 
       console.log(`Subscription cancelled: ${subscription.id}`);
 
-      // TODO: Downgrade user to free tier in DB
-      // await db.update(users)
-      //   .set({ subscriptionTier: 'free', stripeSubscriptionId: null, updatedAt: new Date() })
-      //   .where(eq(users.stripeSubscriptionId, subscription.id));
+      // Downgrade user to free tier
+      await db
+        .update(users)
+        .set({
+          subscriptionTier: 'free',
+          stripeSubscriptionId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.stripeSubscriptionId, subscription.id));
+
+      console.log(`DB downgraded user for cancelled subscription ${subscription.id}`);
 
       break;
     }
@@ -226,7 +271,7 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
       const invoice = event.data.object as Stripe.Invoice;
       console.log(`Payment failed for invoice: ${invoice.id}`);
 
-      // TODO: Send email notification about failed payment
+      // Log the event — email notification can be added later via Resend
       break;
     }
 
@@ -242,15 +287,58 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
  */
 billingRouter.get('/status', requireAuth, async (req: Request, res: Response) => {
   try {
-    // TODO: Look up from DB
+    const clerkId = req.auth!.userId;
+
+    // Look up from DB
+    const [user] = await db
+      .select({
+        subscriptionTier: users.subscriptionTier,
+        stripeCustomerId: users.stripeCustomerId,
+        stripeSubscriptionId: users.stripeSubscriptionId,
+      })
+      .from(users)
+      .where(eq(users.clerkId, clerkId))
+      .limit(1);
+
+    if (!user) {
+      return res.json({
+        success: true,
+        data: {
+          subscriptionTier: 'free',
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+        },
+      });
+    }
+
+    // If user has an active subscription, fetch live details from Stripe
+    let currentPeriodEnd: string | null = null;
+    let cancelAtPeriodEnd = false;
+
+    if (user.stripeSubscriptionId) {
+      try {
+        const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        // In Stripe v20+, current_period_end is on subscription items, not the subscription itself
+        const item = sub.items?.data?.[0];
+        if (item?.current_period_end) {
+          currentPeriodEnd = new Date(item.current_period_end * 1000).toISOString();
+        }
+        cancelAtPeriodEnd = sub.cancel_at_period_end ?? false;
+      } catch (stripeErr) {
+        console.warn('Failed to fetch Stripe subscription details:', stripeErr);
+      }
+    }
+
     return res.json({
       success: true,
       data: {
-        subscriptionTier: 'free',
-        stripeCustomerId: null,
-        stripeSubscriptionId: null,
-        currentPeriodEnd: null,
-        cancelAtPeriodEnd: false,
+        subscriptionTier: user.subscriptionTier,
+        stripeCustomerId: user.stripeCustomerId,
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        currentPeriodEnd,
+        cancelAtPeriodEnd,
       },
     });
   } catch (err) {

@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { eq, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
+import { db } from '../db';
+import { waitlistEmails } from '../db/schema';
 
 export const waitlistRouter = Router();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-// In-memory waitlist store for MVP (will be moved to DB)
-const waitlistEmails: Set<string> = new Set();
 
 /**
  * POST /api/waitlist — Add email to waitlist + send confirmation
@@ -22,23 +22,36 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Deduplicate
-    if (waitlistEmails.has(email.toLowerCase())) {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if already on waitlist
+    const [existing] = await db
+      .select({ id: waitlistEmails.id })
+      .from(waitlistEmails)
+      .where(eq(waitlistEmails.email, normalizedEmail))
+      .limit(1);
+
+    if (existing) {
       return res.json({
         success: true,
         message: 'Already on the waitlist!',
       });
     }
 
-    waitlistEmails.add(email.toLowerCase());
-    console.log(`Waitlist signup: ${email} (total: ${waitlistEmails.size})`);
+    // Insert into DB
+    await db.insert(waitlistEmails).values({
+      email: normalizedEmail,
+      source: 'website',
+    });
+
+    console.log(`Waitlist signup: ${normalizedEmail}`);
 
     // Send confirmation email via Resend
     if (process.env.RESEND_API_KEY) {
       try {
         await resend.emails.send({
           from: 'Perdiemify <onboarding@resend.dev>',
-          to: email,
+          to: normalizedEmail,
           subject: "You're on the Perdiemify waitlist! 🎉",
           html: `
             <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
@@ -60,7 +73,7 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
             </div>
           `,
         });
-        console.log(`Waitlist confirmation email sent to ${email}`);
+        console.log(`Waitlist confirmation email sent to ${normalizedEmail}`);
       } catch (emailErr) {
         console.error('Failed to send waitlist email:', emailErr);
         // Don't fail the request if email fails — user is still on the list
@@ -80,9 +93,21 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
 /**
  * GET /api/waitlist/count — Public count of waitlist signups
  */
-waitlistRouter.get('/count', (_req: Request, res: Response) => {
-  return res.json({
-    success: true,
-    data: { count: waitlistEmails.size },
-  });
+waitlistRouter.get('/count', async (_req: Request, res: Response) => {
+  try {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(waitlistEmails);
+
+    return res.json({
+      success: true,
+      data: { count: result?.count ?? 0 },
+    });
+  } catch (err) {
+    console.error('Waitlist count error:', err);
+    return res.json({
+      success: true,
+      data: { count: 0 },
+    });
+  }
 });
