@@ -4,6 +4,7 @@ import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import './globals.css';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://perdiemify.com'),
   title: 'Perdiemify — Keep the Difference',
   description:
     'Maximize your per diem allowances. Search flights, hotels, and cars — see exactly how much you pocket. Built for government, military, and corporate travelers.',
