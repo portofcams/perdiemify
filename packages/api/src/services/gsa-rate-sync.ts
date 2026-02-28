@@ -48,6 +48,7 @@ interface SyncResult {
 
 /**
  * Fetch all per diem rates for a single state from GSA API.
+ * Includes retry logic for 429 rate limits.
  */
 async function fetchStateRates(state: string, fiscalYear: number): Promise<Array<{
   fiscalYear: number;
@@ -60,47 +61,63 @@ async function fetchStateRates(state: string, fiscalYear: number): Promise<Array
 }>> {
   const url = `${GSA_API_BASE}/rates/state/${encodeURIComponent(state)}/year/${fiscalYear}?api_key=${API_KEY}`;
 
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(30_000),
-  });
+  // Retry up to 3 times for rate limits (429)
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  if (!res.ok) {
-    throw new Error(`GSA API ${res.status} for ${state}`);
-  }
+    if (res.status === 429) {
+      // Rate limited — back off exponentially: 5s, 15s, 45s
+      const delay = 5000 * Math.pow(3, attempt);
+      console.warn(`[PerDiemSync] Rate limited on ${state}, retrying in ${delay / 1000}s...`);
+      await new Promise((r) => setTimeout(r, delay));
+      lastError = new Error(`GSA API 429 for ${state}`);
+      continue;
+    }
 
-  const data = await res.json() as GSARatesResponse;
+    if (!res.ok) {
+      throw new Error(`GSA API ${res.status} for ${state}`);
+    }
 
-  if (!data.rates || data.rates.length === 0) {
-    return [];
-  }
+    const data = await res.json() as GSARatesResponse;
 
-  const results: Array<{
-    fiscalYear: number;
-    state: string;
-    city: string;
-    county: string | null;
-    lodgingRate: number;
-    mieRate: number;
-    month: number;
-  }> = [];
+    if (!data.rates || data.rates.length === 0) {
+      return [];
+    }
 
-  for (const rateGroup of data.rates) {
-    for (const rate of rateGroup.rate) {
-      for (const month of rate.months.month) {
-        results.push({
-          fiscalYear: rateGroup.year,
-          state: rateGroup.state,
-          city: rate.city,
-          county: rate.county || null,
-          lodgingRate: month.value,
-          mieRate: rate.meals,
-          month: month.number,
-        });
+    const results: Array<{
+      fiscalYear: number;
+      state: string;
+      city: string;
+      county: string | null;
+      lodgingRate: number;
+      mieRate: number;
+      month: number;
+    }> = [];
+
+    for (const rateGroup of data.rates) {
+      for (const rate of rateGroup.rate) {
+        for (const month of rate.months.month) {
+          results.push({
+            fiscalYear: rateGroup.year,
+            state: rateGroup.state,
+            city: rate.city,
+            county: rate.county || null,
+            lodgingRate: month.value,
+            mieRate: rate.meals,
+            month: month.number,
+          });
+        }
       }
     }
+
+    return results;
   }
 
-  return results;
+  // All retries exhausted
+  throw lastError || new Error(`GSA API failed for ${state} after 3 attempts`);
 }
 
 /**
@@ -188,8 +205,8 @@ export async function syncAllPerDiemRates(fiscalYear?: number): Promise<{
         error: null,
       });
 
-      // Rate limit: max ~2 req/sec against GSA API
-      await new Promise((r) => setTimeout(r, 500));
+      // Rate limit: ~1 req per 2 sec for DEMO_KEY safety
+      await new Promise((r) => setTimeout(r, 2000));
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Unknown error';
       failedStates.push(state);
@@ -201,8 +218,8 @@ export async function syncAllPerDiemRates(fiscalYear?: number): Promise<{
       });
       console.error(`[PerDiemSync] Failed for ${state}: ${error}`);
 
-      // Shorter delay on failure, then continue
-      await new Promise((r) => setTimeout(r, 200));
+      // Longer delay on failure before trying next state
+      await new Promise((r) => setTimeout(r, 3000));
     }
   }
 
