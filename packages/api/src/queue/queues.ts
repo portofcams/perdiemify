@@ -5,9 +5,10 @@ import { getQueueConnection } from './connection';
  * Queue definitions for all background jobs.
  *
  * Queues:
- *  - scraper      : Discount code scraping (every 4h)
- *  - perdiem-sync : Cache GSA per diem rates to DB (every 24h)
- *  - deal-alerts  : Send deal alert emails to Pro+ users (after scraper)
+ *  - scraper             : Discount code scraping (every 4h)
+ *  - perdiem-sync        : Cache GSA per diem rates to DB (daily)
+ *  - deal-alerts         : Send deal alert emails to Pro+ users
+ *  - discount-validation : Recalculate success rates & expire stale codes (every 6h)
  */
 
 export const scraperQueue = new Queue('scraper', {
@@ -37,5 +38,15 @@ export const dealAlertsQueue = new Queue('deal-alerts', {
     backoff: { type: 'fixed', delay: 60_000 },
     removeOnComplete: { count: 30 },
     removeOnFail: { count: 50 },
+  },
+});
+
+export const discountValidationQueue = new Queue('discount-validation', {
+  connection: getQueueConnection(),
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 30_000 },
+    removeOnComplete: { count: 20 },
+    removeOnFail: { count: 30 },
   },
 });

@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { createWorkerConnection } from './connection';
-import { perdiemSyncQueue } from './queues';
+import { perdiemSyncQueue, discountValidationQueue } from './queues';
 import { syncAllPerDiemRates, getCachedRateCount } from '../services/gsa-rate-sync';
 import { sendDealAlerts } from '../services/deal-alerts';
+import { recalculateSuccessRates, expireStaleCode } from '../services/discount-engine';
 import { getCurrentFiscalYear } from '@perdiemify/shared';
 
 console.log('Perdiemify Worker starting...');
@@ -31,7 +32,7 @@ const perdiemWorker = new Worker(
   },
   {
     connection: createWorkerConnection(),
-    concurrency: 1, // Only one sync at a time
+    concurrency: 1,
   }
 );
 
@@ -75,6 +76,37 @@ dealAlertsWorker.on('failed', (job, err) => {
   console.error(`[Worker] deal-alerts job ${job?.id} failed:`, err.message);
 });
 
+// --- Discount Validation Worker ---
+// Recalculates success_rate from community votes, auto-expires low-rated codes
+
+const discountValidationWorker = new Worker(
+  'discount-validation',
+  async (job) => {
+    console.log(`[Worker] Processing discount-validation job: ${job.id}`);
+
+    const [updatedCount, expiredCount] = await Promise.all([
+      recalculateSuccessRates(),
+      expireStaleCode(),
+    ]);
+
+    console.log(`[Worker] Discount validation: ${updatedCount} rates recalculated, ${expiredCount} stale codes expired`);
+
+    return { successRatesUpdated: updatedCount, codesExpired: expiredCount };
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 1,
+  }
+);
+
+discountValidationWorker.on('completed', (job) => {
+  console.log(`[Worker] discount-validation job ${job.id} completed`);
+});
+
+discountValidationWorker.on('failed', (job, err) => {
+  console.error(`[Worker] discount-validation job ${job?.id} failed:`, err.message);
+});
+
 // --- Schedule repeatable jobs ---
 
 async function setupSchedules() {
@@ -82,13 +114,24 @@ async function setupSchedules() {
     // Per diem sync: run daily at 2:00 AM UTC
     await perdiemSyncQueue.upsertJobScheduler(
       'daily-perdiem-sync',
-      { pattern: '0 2 * * *' }, // cron: every day at 2 AM
+      { pattern: '0 2 * * *' },
       {
         name: 'daily-perdiem-sync',
         data: { fiscalYear: getCurrentFiscalYear() },
       }
     );
     console.log('[Worker] Scheduled: perdiem-sync (daily at 2 AM UTC)');
+
+    // Discount validation: run every 6 hours
+    await discountValidationQueue.upsertJobScheduler(
+      'periodic-discount-validation',
+      { pattern: '0 */6 * * *' },
+      {
+        name: 'periodic-discount-validation',
+        data: {},
+      }
+    );
+    console.log('[Worker] Scheduled: discount-validation (every 6 hours)');
 
     // Check if rates need initial sync (table is empty)
     const rateCount = await getCachedRateCount();
@@ -120,6 +163,7 @@ async function shutdown(signal: string) {
   await Promise.allSettled([
     perdiemWorker.close(),
     dealAlertsWorker.close(),
+    discountValidationWorker.close(),
   ]);
 
   console.log('Worker shut down cleanly.');
@@ -129,4 +173,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log('Worker is running — processing perdiem-sync and deal-alerts jobs.');
+console.log('Worker is running — processing perdiem-sync, deal-alerts, and discount-validation jobs.');

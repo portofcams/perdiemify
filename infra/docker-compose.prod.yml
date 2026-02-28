@@ -11,12 +11,12 @@ services:
         - NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
         - NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
         - NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
-        - NEXT_PUBLIC_API_URL=http://perdiemify.com/api
+        - NEXT_PUBLIC_API_URL=https://perdiemify.com/api
     ports:
       - "127.0.0.1:3000:3000"
     env_file: ../.env
     environment:
-      - NEXT_PUBLIC_API_URL=http://perdiemify.com/api
+      - NEXT_PUBLIC_API_URL=https://perdiemify.com/api
     depends_on:
       - api
     restart: unless-stopped
@@ -78,7 +78,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 512mb --maxmemory-policy noeviction --appendonly yes
     volumes:
       - redisdata:/data
     ports:
