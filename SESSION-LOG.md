@@ -951,4 +951,77 @@ apps/web/src/app/layout.tsx             — Added metadataBase for OG images
 - [ ] Test Clerk auth flow end-to-end (sign up → dashboard → submit code)
 
 ---
-*Last updated: Feb 28, 2026 — Session 7*
+
+## 2026-02-28 — Session 7b: Phase 3 Loyalty System
+
+### Phase 3: Loyalty System — Built & Deployed
+
+#### New Service: `loyalty-tracker.ts` (~510 lines)
+- **22+ program valuations** curated from public sources (TPG, NerdWallet, Bankrate):
+  - 6 airlines: Delta SkyMiles (1.2¢), United MileagePlus (1.3¢), American AAdvantage (1.4¢), Southwest Rapid Rewards (1.4¢), JetBlue TrueBlue (1.3¢), Alaska Mileage Plan (1.5¢)
+  - 7 hotels: Marriott Bonvoy (0.7¢), Hilton Honors (0.5¢), IHG One Rewards (0.5¢), World of Hyatt (1.7¢), Wyndham (0.7¢), Choice Privileges (0.6¢), Best Western (0.6¢)
+  - 4 car rentals: National Emerald Club (0.8¢), Hertz Gold Plus (0.7¢), Avis Preferred (0.5¢), Enterprise Plus (0.5¢)
+  - 4 credit card programs: Chase UR (2.0¢), Amex MR (2.0¢), Citi TY (1.7¢), Capital One (1.7¢)
+- **Elite tiers** for every program: threshold, earning multiplier, perks list
+- **Transfer partners** for credit card programs
+- **`syncLoyaltyValuations()`** — Upserts all 22 programs to `loyalty_valuations` table
+- **`estimatePointsEarned()`** — Points earned per booking with status multiplier
+- **`recommendCreditCard()`** — Given booking type/provider/amount, ranks all credit card programs by estimated value (checks transfer partner value vs direct earning)
+- **`detectLoyaltyProgram()`** — Maps provider name (Marriott, Delta, Hertz) → loyalty program
+- **`getStatusProgress()`** — Current tier → next tier, progress %, perks, multiplier
+- **`getProgramDetails()`** — Full program info with tiers and partners
+
+#### Enhanced Loyalty API (`loyalty.ts`, 6 new endpoints)
+- `POST /api/loyalty/recommend` — Credit card recommendation for a booking (bookingType, provider, amountUsd)
+- `GET /api/loyalty/estimate` — Estimate points earned (?program=&amount=&status=)
+- `GET /api/loyalty/programs` — List all 22 program details with tiers
+- `GET /api/loyalty/programs/:name` — Get single program details
+- `GET /api/loyalty/status/:id` — Elite status progress for an account (requireAuth)
+- `POST /api/loyalty/sync-valuations` — Internal: refresh valuations data (x-internal-key)
+
+#### Worker Updates
+- **4 BullMQ workers**: perdiem-sync, deal-alerts, discount-validation, loyalty-valuations
+- **New cron**: `loyalty-valuations` weekly Sunday 3 AM UTC
+- **Initial sync on boot**: Worker triggers loyalty valuation sync immediately on startup
+- All 21/21 program valuations synced to DB on deploy ✅
+
+#### Enhanced Loyalty Dashboard (`loyalty/page.tsx`)
+- **Credit Card Recommender widget**: Expandable panel with booking type/provider/amount form
+  - Results ranked by estimated value with "Best" badge on top pick
+  - Shows card program, transfer strategy, points earned, dollar value
+- **Elite status progress bars**: On each account card (current tier → next tier, % bar)
+  - Shows perks tags for current tier
+  - Earning multiplier badge (e.g., "1.5x earning rate")
+- **Status level badges** (Gold, Platinum, etc.)
+- **Market valuations table** — now 22 programs (was 17)
+
+### Commits
+- `cec653c` — feat: Phase 3 Loyalty System — valuations, recommendations, elite status
+
+### Production Verification
+- `/api/health` → 200 ✅
+- `/api/loyalty/programs` → 200 (22 programs with full tier/partner data) ✅
+- `/api/loyalty/valuations` → 200 (21 programs synced to DB) ✅
+- `/api/loyalty/recommend` → 200 (tested: $200 Marriott hotel → ranked recommendations) ✅
+- `/api/loyalty/estimate?program=Marriott+Bonvoy&amount=200&status=Platinum` → 200 (3,000 pts = $21) ✅
+- Worker: 4 scheduled jobs (perdiem-sync, discount-validation, loyalty-valuations, deal-alerts) ✅
+- 21/21 valuations synced on boot ✅
+
+### Production State (8/8 containers running)
+- API: ✅ healthy
+- Worker: ✅ 4 scheduled jobs
+- Scraper: ✅ 5 sources
+- Redis: ✅ noeviction policy
+- 804 cached per diem rates (6 states)
+- 17+ active discount codes
+- 21 loyalty program valuations in DB
+- Clerk production auth working via DNS
+- SSL: Cloudflare Flexible ✅
+
+### Remaining vendor tasks (user action needed)
+- [ ] Stripe webhook URL: `https://perdiemify.com/api/billing/webhook`
+- [ ] Clerk webhook URL: `https://perdiemify.com/api/webhooks/clerk`
+- [ ] Amadeus production API keys (test keys return empty results)
+
+---
+*Last updated: Feb 28, 2026 — Session 7b*
