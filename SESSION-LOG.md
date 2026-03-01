@@ -1284,4 +1284,81 @@ infra/docker-compose.prod.yml                  — uploads volume for api + work
 - [ ] Pull server commit `70db6fe` (type fixes) to local once git works
 
 ---
-*Last updated: Mar 1, 2026 — Session 9*
+
+## 2026-03-01 — Session 10: Dashboard Layout, Settings & Trip Detail
+
+### Where we left off (Session 9)
+- Phase 5 complete: price alerts, OCONUS rates, expense integrations, enhanced OCR
+- 8 dashboard pages fully built but each duplicated its own nav header
+- No shared layout, no settings page, no trip detail drill-down
+- Uncommitted files from Session 9
+
+### Today's completed work
+
+#### Commit 1: Phase 5 uncommitted work
+- Committed 16 files / 2,112 lines from Sessions 8-9 that were unstaged
+- Price alerts, OCONUS rates (60 destinations / 38 countries), Concur/Expensify push, itinerary builder scaffold, Claude Vision OCR upgrade
+- 3 new DB tables, 3 new background queues, trip itinerary endpoint
+
+#### Commit 2: Shared Dashboard Layout + Settings + Trip Detail
+
+**Shared Dashboard Layout (Phase 1)**
+- [x] **`apps/web/src/components/layout/DashboardSidebar.tsx`** — New sidebar nav
+  - Desktop: fixed w-64 sidebar with 9 nav items (lucide-react icons)
+  - Mobile: overlay with framer-motion slide animation
+  - Active state detection via `usePathname()`
+  - Clerk `<UserButton />` + user info at bottom
+- [x] **`apps/web/src/components/layout/DashboardHeader.tsx`** — Mobile-only sticky header
+  - Hamburger menu trigger, centered logo, UserButton
+- [x] **`apps/web/src/app/dashboard/layout.tsx`** — Nested layout
+  - Wraps all `/dashboard/*` routes with sidebar + header + `<main>` content area
+  - `lg:pl-64` offset for fixed sidebar on desktop
+- [x] **Stripped nav from all 8 pages** — Removed duplicated `<nav>`, `min-h-screen`, and `max-w-6xl` wrappers from:
+  - `dashboard/page.tsx`, `trips/page.tsx`, `receipts/page.tsx`, `meals/page.tsx`
+  - `loyalty/page.tsx`, `deals/page.tsx`, `analytics/page.tsx`, `billing/page.tsx`
+  - `loading.tsx`, `error.tsx`
+- [x] Cleaned up unused imports (UserButton, useUser, Link)
+- Net result: -278 lines of duplicated nav code
+
+**Settings Page (Phase 2)**
+- [x] **`apps/web/src/app/dashboard/settings/page.tsx`** — 4 sections:
+  - Profile Info: Clerk avatar, name, email (read-only), "Manage Account" link
+  - Per Diem Preferences: source dropdown (GSA/JTR/Corporate/Custom), custom rate inputs, PATCH `/api/users/me`
+  - Notification Preferences: toggle switches (price alerts, weekly digest, deals), localStorage
+  - Connected Integrations: list from GET `/api/integrations`, connect/disconnect Concur & Expensify
+
+**Trip Detail View (Phase 3)**
+- [x] **`apps/web/src/app/dashboard/trips/[id]/page.tsx`** — Tabbed detail page
+  - Trip header: name, destination, dates, status badge, key stats (nights, rates, allowance, savings)
+  - 5 tabs: Overview, Meals, Receipts, Compliance, Alerts
+  - Parallel data fetching from 5 API endpoints via `Promise.all`
+  - Full per diem compliance table with daily breakdown
+  - Back link to trips list
+- [x] **Modified `trips/page.tsx`** — Trip names are now clickable links to `/dashboard/trips/[id]`
+
+### Files changed
+| Action | Count |
+|--------|-------|
+| New files created | 5 (sidebar, header, layout, settings, trip detail) |
+| Existing files modified | 10 (8 pages + loading + error) |
+| Lines added | +1,095 |
+| Lines removed | -278 |
+
+### Commits pushed
+```
+a48bff1  feat: Phase 5 — price alerts, OCONUS rates, expense integrations, enhanced OCR
+1bdc5db  feat: shared dashboard layout, settings page, and trip detail view
+```
+
+### Remaining Setup Items
+- [ ] Set `ANTHROPIC_API_KEY` in .env for Claude Vision receipt OCR
+- [ ] Set `CONCUR_CLIENT_ID` + `CONCUR_CLIENT_SECRET` for SAP Concur OAuth
+- [ ] Expensify partner credentials (users provide in-app)
+- [ ] Amadeus production API keys (test keys return empty hotel results)
+- [ ] Run `npm run dev:web` to visually verify sidebar layout
+- [ ] PWA support (Day 12)
+- [ ] Landing page & SEO polish (Day 13)
+- [ ] Launch polish (Day 14)
+
+---
+*Last updated: Mar 1, 2026 — Session 10*
