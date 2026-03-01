@@ -1024,4 +1024,264 @@ apps/web/src/app/layout.tsx             — Added metadataBase for OG images
 - [ ] Amadeus production API keys (test keys return empty results)
 
 ---
-*Last updated: Feb 28, 2026 — Session 7b*
+
+## 2026-02-28 — Session 8: Phase 4 Receipts & Expenses
+
+### Phase 4: Receipts & Expenses — Built & Deployed
+
+#### New Service: `receipt-ocr.ts` (~210 lines)
+- **Tesseract.js OCR** with singleton worker pattern
+- `processReceiptImage(imageBuffer)` → `{ rawText, vendor, amount, date, category, confidence }`
+- Amount extraction: regex for TOTAL/AMOUNT DUE patterns, fallback to largest dollar amount
+- Date extraction: ISO, named month, slash/dash format parsing
+- Vendor extraction: first meaningful line skipping addresses/phones/dates
+- Category inference: keyword mapping (lodging, meals, transport, parking, tips, other)
+- `shutdownOcr()` for graceful Tesseract worker termination
+
+#### New Service: `expense-export.ts` (~340 lines)
+- `generateExpenseCsv(trip, receipts, meals, format)` — supports Generic, SAP Concur, Expensify formats
+- `generateExpensePdf(trip, complianceDays, receipts, meals)` → Buffer
+  - Header (Perdiemify branding), trip details, compliance summary box (green/red)
+  - Daily breakdown table (Date, Lodging, L.Rate, M&IE, M&IE Rate, Total, Delta)
+  - Expense line items table (Date, Vendor, Category, Amount, Source)
+  - Footer with generation date
+
+#### New Utility: `storage.ts` (~180 lines)
+- `StorageAdapter` interface: upload, getBuffer, getUrl, delete, isR2
+- `LocalStorageAdapter` — writes to `/app/uploads/` Docker volume
+- `R2StorageAdapter` — S3-compatible SDK for Cloudflare R2
+- `getStorage()` factory auto-detects R2 vs local filesystem at runtime
+- Helper: `getContentType()`, `receiptStorageKey()`
+
+#### Receipts API (`receipts.ts`, 9 endpoints)
+- `POST /api/receipts/upload` — multer upload (10MB max, images only), creates DB record, queues OCR
+- `GET /api/receipts` — list receipts (?tripId= filter)
+- `GET /api/receipts/:id` — single receipt (for OCR polling)
+- `PATCH /api/receipts/:id` — update/verify OCR data
+- `DELETE /api/receipts/:id` — remove receipt + storage file
+- `GET /api/receipts/image/*` — proxy image from storage (auth-gated)
+- `GET /api/receipts/compliance` — per diem compliance summary by day
+- `GET /api/receipts/export/csv` — CSV expense report (Generic/Concur/Expensify)
+- `GET /api/receipts/export/pdf` — PDF expense report
+
+#### BullMQ OCR Queue + Worker
+- New `ocrQueue` with 3 attempts, exponential backoff (10s)
+- `ocrWorker` (concurrency: 2): loads image → runs OCR → updates DB
+- Sets receipt status to 'ready' on success, 'failed' on error
+- Graceful shutdown with `ocrWorker.close()` + `shutdownOcr()`
+
+#### Receipts Dashboard (`/dashboard/receipts`)
+- Upload button with camera capture (mobile) + file select
+- Trip selector dropdown
+- Stats cards: receipt count, total amount, verified count, budget delta
+- Per diem compliance table (daily breakdown: lodging/M&IE vs allowance)
+- Export section: CSV format picker (Generic/Concur/Expensify) + PDF download
+- Receipt list with status badges (Processing spinner, Ready, Failed, Verified)
+- Inline OCR editing panel: vendor, amount, date, category — saves + marks verified
+- Auto-polling: refreshes every 3s while any receipt is 'processing'
+
+#### DB Changes
+- Added `storage_key` (text) column to receipts table
+- Added `status` (varchar 20, default 'processing') column to receipts table
+- Added `idx_receipts_trip` index on receipts.trip_id
+
+#### Docker Changes
+- New `uploads` named volume shared between api + worker containers
+- Both services mount `uploads:/app/uploads`
+
+#### Dependencies Added
+- `multer` (^2.1.0) — multipart file upload
+- `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` — R2 storage
+- `tesseract.js` (^7.0.0) — OCR engine
+- `pdfkit` (^0.17.2) — PDF generation
+- `@types/multer`, `@types/pdfkit` — type definitions
+
+### Bug Fixes During Deploy
+- `catch (err)` → `catch (err: unknown)` for strict TypeScript
+- Added missing `@types/multer` + `@types/pdfkit` to devDependencies
+- Fixed DB password mismatch: postgres volume retained `perdiemify_dev` but .env had `perdiemify1$`
+  - Reset postgres password with `ALTER USER perdiemify PASSWORD 'perdiemify_dev'`
+  - Health check went from `degraded` → `ok` (19ms latency)
+  - Worker loyalty sync fixed: 21/21 valuations synced (was 0/21)
+
+### Commits
+- `ce2b1df` — feat: Phase 4 Receipts & Expenses — OCR, storage, exports, dashboard
+- `70db6fe` — fix: add @types/multer + @types/pdfkit and catch type annotation (server-only)
+
+### Production Verification
+- `/api/health` → 200, DB 19ms latency ✅
+- `/api/receipts` → 401 (auth required, correct) ✅
+- Worker: 5 queues (perdiem-sync, discount-validation, loyalty-valuations, deal-alerts, receipt-ocr) ✅
+- Worker: 804 per diem rates, 21/21 loyalty valuations synced ✅
+- Uploads volume created and mounted ✅
+- All 8 containers running ✅
+
+### Production State (8/8 containers running)
+- API: ✅ healthy (19ms DB latency)
+- Worker: ✅ 5 scheduled jobs (+ receipt-ocr worker)
+- Scraper: ✅ 5 sources
+- Redis: ✅ noeviction policy
+- 804 cached per diem rates
+- 17+ active discount codes
+- 21 loyalty program valuations
+- Clerk production auth via DNS ✅
+- SSL: Cloudflare Flexible ✅
+- Receipts: upload + OCR + export pipeline ready ✅
+
+### New files created
+```
+packages/api/src/utils/storage.ts              — Storage abstraction (local + R2)
+packages/api/src/services/receipt-ocr.ts       — Tesseract.js OCR service
+packages/api/src/services/expense-export.ts    — PDF + CSV expense export
+packages/api/src/routes/receipts.ts            — Receipts API (9 endpoints)
+apps/web/src/app/dashboard/receipts/page.tsx   — Receipts dashboard page
+```
+
+### Files modified
+```
+packages/api/src/db/schema.ts                  — Added storage_key, status columns + index
+packages/api/src/index.ts                      — Registered receipts route
+packages/api/src/queue/queues.ts               — Added ocrQueue
+packages/api/src/queue/worker.ts               — Added OCR worker + imports
+packages/api/package.json                      — Added 6 new dependencies
+infra/docker-compose.prod.yml                  — uploads volume for api + worker
+```
+
+### Known issue
+- Xcode license expired on Mac — blocking local `git` commands. Type fixes committed on server but not pushed to GitHub. Need to run `sudo xcodebuild -license accept` in Terminal, then `cd /Users/johnthomas/Desktop/Perdiemify.com && git pull` from server remote.
+
+### Remaining vendor tasks (user action needed)
+- [ ] Stripe webhook URL: `https://perdiemify.com/api/billing/webhook`
+- [ ] Clerk webhook URL: `https://perdiemify.com/api/webhooks/clerk`
+- [ ] Amadeus production API keys (test keys return empty results)
+- [ ] Cloudflare R2 bucket for receipt storage (optional — local storage works)
+- [ ] Accept Xcode license: `sudo xcodebuild -license accept`
+
+---
+
+## 2026-03-01 — Session 9: Phase 5 — Five Feature Upgrades + Production Audit
+
+### Features Implemented
+
+#### Feature 1: AI Receipt Analysis (Claude Vision API)
+- **Modified**: `packages/api/src/services/receipt-ocr.ts` — Complete rewrite
+  - Primary: Claude Vision API (`claude-haiku-4-5-20251001`) for structured receipt extraction
+  - Sends receipt image as base64, prompts for JSON extraction (vendor, amount, date, category, lineItems, confidence)
+  - Fallback: Tesseract.js OCR when `ANTHROPIC_API_KEY` not set
+  - Added `lineItems` extraction (Claude can read individual receipt items)
+  - New `OcrResult.engine` field ('claude' | 'tesseract') for tracking
+  - New `OcrResult.lineItems` array with description, amount, quantity
+- **Modified**: `packages/api/src/queue/worker.ts` — Updated OCR log to show engine type and line item count
+- **Env**: `ANTHROPIC_API_KEY` — set this to enable Claude Vision (currently empty on server)
+
+#### Feature 2: Price Drop Alerts
+- **New table**: `price_alerts` — tracks monitored hotel prices per user/trip
+  - Fields: destination, check_in/out, target_price (per diem lodging), current_best, current_provider, is_active, last_checked, last_alert_sent
+- **New file**: `packages/api/src/services/price-monitor.ts`
+  - `checkAllPriceAlerts()` — iterates active alerts, searches Amadeus for prices, compares to per diem rate
+  - Sends email via Resend when price drops below target (rate-limited to 1 alert per trip per 24h)
+  - Auto-deactivates alerts for past check-in dates
+- **New file**: `packages/api/src/routes/alerts.ts`
+  - `GET /api/alerts` — list user's price alerts
+  - `POST /api/alerts` — create alert with destination, dates, target price
+  - `POST /api/alerts/from-trip/:tripId` — auto-create alert from trip data
+  - `PATCH /api/alerts/:id` — toggle active/inactive
+  - `DELETE /api/alerts/:id` — delete alert
+- **New queue**: `price-monitor` — runs every 6 hours
+
+#### Feature 3: Trip Itinerary Builder
+- **New file**: `packages/api/src/services/itinerary-builder.ts`
+  - `buildItinerary(tripId)` — loads trip, searches hotels + flights via Amadeus
+  - Finds cheapest hotel under per diem, cheapest flight
+  - Detects loyalty programs (Marriott, Hilton, Hyatt, etc.) and estimates points earned
+  - Returns structured itinerary with daily per diem breakdown
+- **Modified**: `packages/api/src/routes/trips.ts`
+  - `POST /api/trips/:id/itinerary` — builds optimized itinerary for a trip
+
+#### Feature 4: OCONUS International Per Diem
+- **New table**: `oconus_rates` — 60 rates across 38 countries
+  - Fields: fiscal_year, country, country_code, location, lodging_rate, mie_rate, effective_date, season
+  - Unique index on (fiscal_year, country_code, location, effective_date)
+- **New file**: `packages/api/src/services/state-dept-rates.ts`
+  - Curated data: Top 60 international per diem destinations (State Dept DSSR rates)
+  - `syncOconusRates(fiscalYear)` — bulk upsert to DB with conflict handling
+  - `getOconusRate(country, location, year)` — lookup with "Other" fallback
+  - `listOconusCountries(year)` — country list with location counts
+  - `listOconusLocations(country, year)` — all locations in a country
+- **Modified**: `packages/api/src/routes/perdiem.ts` — Added 4 OCONUS endpoints:
+  - `GET /api/perdiem/oconus/countries` — list all countries with rates
+  - `GET /api/perdiem/oconus/rates?country=DE&location=Berlin` — lookup rates
+  - `POST /api/perdiem/oconus/calculate` — international per diem calculation
+  - `POST /api/perdiem/oconus/sync` — trigger OCONUS rate sync (internal)
+- **New queue**: `oconus-sync` — runs monthly on 1st at 4 AM UTC
+
+#### Feature 5: Direct Expense System Push (Concur & Expensify)
+- **New table**: `integrations` — stores OAuth tokens / API credentials per user per provider
+  - Fields: user_id, provider ('concur'|'expensify'), access_token, refresh_token, token_expires_at, external_user_id, is_active
+  - Unique index on (user_id, provider)
+- **New file**: `packages/api/src/services/expense-push.ts`
+  - `pushExpenseReport(userId, tripId, provider)` — main push orchestrator
+  - Concur: OAuth2 flow, creates expense report + entries via REST API
+  - Expensify: Integration Server API with partner credentials
+  - Builds expense entries from receipts + meals + lodging per diem
+  - Maps categories to provider-specific types
+- **New file**: `packages/api/src/routes/integrations.ts`
+  - `GET /api/integrations` — list connected integrations (safe: no tokens exposed)
+  - `POST /api/integrations/concur/connect` — initiate OAuth flow
+  - `GET /api/integrations/concur/callback` — OAuth callback, stores tokens
+  - `POST /api/integrations/expensify/connect` — save API credentials
+  - `DELETE /api/integrations/:id` — disconnect
+  - `POST /api/integrations/push/:tripId` — queue expense push job
+- **New queue**: `expense-push` — processes push jobs asynchronously
+
+### Infrastructure Changes
+- **Modified**: `packages/api/src/db/schema.ts` — Added 3 new tables (price_alerts, oconus_rates, integrations)
+- **Modified**: `packages/api/src/queue/queues.ts` — Added 3 new queues (price-monitor, oconus-sync, expense-push)
+- **Modified**: `packages/api/src/queue/worker.ts` — Added 3 new workers + 2 new schedules
+- **Modified**: `packages/api/src/index.ts` — Registered alerts + integrations routes (now 15 routes total)
+
+### Production Audit Results (Mar 1, 2026)
+| Check | Result |
+|-------|--------|
+| API Health | `ok` (1ms DB latency) |
+| Public routes (7) | All 200 |
+| Auth routes (9) | All 401 |
+| Docker containers | 8/8 running |
+| Worker queues | 8 scheduled (perdiem-sync, discount-validation, loyalty-valuations, receipt-ocr, deal-alerts, price-monitor, oconus-sync, expense-push) |
+| Redis | 63 keys, healthy |
+| DB tables | 15 total |
+| Per diem rates | 1,200 cached (FY2026) |
+| OCONUS rates | 60 rates / 38 countries |
+| Loyalty programs | 21 synced |
+| OCONUS calculate test | Tokyo 4-night: $2,041 allowance |
+
+### API Route Summary (15 total)
+| Route | Auth | Methods |
+|-------|------|---------|
+| `/api/health` | No | GET |
+| `/api/search` | No | GET |
+| `/api/perdiem` | No | GET /rates, POST /calculate, POST /sync, GET /cache-status |
+| `/api/perdiem/oconus` | No | GET /countries, GET /rates, POST /calculate, POST /sync |
+| `/api/trips` | Yes | GET, POST, PATCH, DELETE, POST /:id/itinerary |
+| `/api/billing` | Yes | Various + webhook |
+| `/api/users` | Yes | GET, PATCH |
+| `/api/waitlist` | No | POST |
+| `/api/webhooks` | No | POST /clerk |
+| `/api/deals` | No | GET |
+| `/api/loyalty` | Mixed | GET /programs (public), /accounts (auth) |
+| `/api/meals` | Yes | GET, POST, DELETE |
+| `/api/receipts` | Yes | GET, POST, PATCH, DELETE |
+| `/api/analytics` | Yes | GET |
+| `/api/alerts` | Yes | GET, POST, POST /from-trip, PATCH, DELETE |
+| `/api/integrations` | Yes | GET, POST /concur/connect, GET /concur/callback, POST /expensify/connect, DELETE, POST /push/:tripId |
+
+### Remaining Setup Items
+- [ ] Set `ANTHROPIC_API_KEY` in .env for Claude Vision receipt OCR
+- [ ] Set `CONCUR_CLIENT_ID` + `CONCUR_CLIENT_SECRET` for SAP Concur OAuth
+- [ ] Expensify partner credentials (users provide in-app)
+- [ ] Amadeus production API keys (test keys return empty hotel results)
+- [ ] Accept Xcode license locally: `sudo xcodebuild -license accept`
+- [ ] Pull server commit `70db6fe` (type fixes) to local once git works
+
+---
+*Last updated: Mar 1, 2026 — Session 9*

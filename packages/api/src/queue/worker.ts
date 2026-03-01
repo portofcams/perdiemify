@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
 import { createWorkerConnection } from './connection';
-import { perdiemSyncQueue, discountValidationQueue, loyaltyValuationQueue } from './queues';
+import { perdiemSyncQueue, discountValidationQueue, loyaltyValuationQueue, priceMonitorQueue, oconusSyncQueue, expensePushQueue } from './queues';
 import { syncAllPerDiemRates, getCachedRateCount } from '../services/gsa-rate-sync';
 import { sendDealAlerts } from '../services/deal-alerts';
 import { recalculateSuccessRates, expireStaleCode } from '../services/discount-engine';
@@ -12,6 +12,9 @@ import { receipts } from '../db/schema';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
 import { getCurrentFiscalYear } from '@perdiemify/shared';
+import { checkAllPriceAlerts } from '../services/price-monitor';
+import { syncOconusRates } from '../services/state-dept-rates';
+import { pushExpenseReport } from '../services/expense-push';
 
 console.log('Perdiemify Worker starting...');
 console.log('Environment:', process.env.NODE_ENV || 'development');
@@ -152,7 +155,7 @@ const ocrWorker = new Worker(
       const storage = getStorage();
       const imageBuffer = await storage.getBuffer(storageKey);
 
-      // Run OCR
+      // Run OCR (Claude Vision if ANTHROPIC_API_KEY set, else Tesseract fallback)
       const result = await processReceiptImage(imageBuffer);
 
       // Update receipt record with extracted data
@@ -167,7 +170,7 @@ const ocrWorker = new Worker(
         })
         .where(eq(receipts.id, receiptId));
 
-      console.log(`[Worker] OCR complete for receipt ${receiptId}: vendor=${result.vendor}, amount=${result.amount}, confidence=${result.confidence}%`);
+      console.log(`[Worker] OCR complete for receipt ${receiptId} (${result.engine}): vendor=${result.vendor}, amount=${result.amount}, items=${result.lineItems.length}, confidence=${result.confidence}%`);
       return result;
     } catch (err) {
       // Mark receipt as failed
@@ -191,6 +194,80 @@ ocrWorker.on('completed', (job) => {
 
 ocrWorker.on('failed', (job, err) => {
   console.error(`[Worker] receipt-ocr job ${job?.id} failed:`, err.message);
+});
+
+// --- Price Monitor Worker ---
+
+const priceMonitorWorker = new Worker(
+  'price-monitor',
+  async (job) => {
+    console.log(`[Worker] Processing price-monitor job: ${job.id}`);
+    const result = await checkAllPriceAlerts();
+    console.log(`[Worker] Price monitor: checked ${result.checked} alerts, sent ${result.alertsSent} emails`);
+    return result;
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 1,
+  }
+);
+
+priceMonitorWorker.on('completed', (job) => {
+  console.log(`[Worker] price-monitor job ${job.id} completed`);
+});
+
+priceMonitorWorker.on('failed', (job, err) => {
+  console.error(`[Worker] price-monitor job ${job?.id} failed:`, err.message);
+});
+
+// --- OCONUS Sync Worker ---
+
+const oconusSyncWorker = new Worker(
+  'oconus-sync',
+  async (job) => {
+    console.log(`[Worker] Processing oconus-sync job: ${job.id}`);
+    const fiscalYear = job.data?.fiscalYear || getCurrentFiscalYear();
+    const result = await syncOconusRates(fiscalYear);
+    console.log(`[Worker] OCONUS sync: ${result.inserted} rates for ${result.countries} countries`);
+    return result;
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 1,
+  }
+);
+
+oconusSyncWorker.on('completed', (job) => {
+  console.log(`[Worker] oconus-sync job ${job.id} completed`);
+});
+
+oconusSyncWorker.on('failed', (job, err) => {
+  console.error(`[Worker] oconus-sync job ${job?.id} failed:`, err.message);
+});
+
+// --- Expense Push Worker ---
+
+const expensePushWorker = new Worker(
+  'expense-push',
+  async (job) => {
+    console.log(`[Worker] Processing expense-push job: ${job.id}`);
+    const { userId, tripId, provider } = job.data;
+    const result = await pushExpenseReport(userId, tripId, provider);
+    console.log(`[Worker] Expense push to ${provider}: ${result.status}`);
+    return result;
+  },
+  {
+    connection: createWorkerConnection(),
+    concurrency: 2,
+  }
+);
+
+expensePushWorker.on('completed', (job) => {
+  console.log(`[Worker] expense-push job ${job.id} completed`);
+});
+
+expensePushWorker.on('failed', (job, err) => {
+  console.error(`[Worker] expense-push job ${job?.id} failed:`, err.message);
 });
 
 // --- Schedule repeatable jobs ---
@@ -245,6 +322,28 @@ async function setupSchedules() {
       console.log(`[Worker] ${rateCount} cached per diem rates found for FY${getCurrentFiscalYear()}`);
     }
 
+    // Price monitor: run every 6 hours
+    await priceMonitorQueue.upsertJobScheduler(
+      'periodic-price-monitor',
+      { pattern: '0 */6 * * *' },
+      {
+        name: 'periodic-price-monitor',
+        data: {},
+      }
+    );
+    console.log('[Worker] Scheduled: price-monitor (every 6 hours)');
+
+    // OCONUS sync: run monthly on the 1st at 4 AM UTC
+    await oconusSyncQueue.upsertJobScheduler(
+      'monthly-oconus-sync',
+      { pattern: '0 4 1 * *' },
+      {
+        name: 'monthly-oconus-sync',
+        data: { fiscalYear: getCurrentFiscalYear() },
+      }
+    );
+    console.log('[Worker] Scheduled: oconus-sync (monthly 1st at 4 AM UTC)');
+
     console.log('[Worker] All schedules configured successfully');
   } catch (err) {
     console.error('[Worker] Failed to set up schedules:', err instanceof Error ? err.message : err);
@@ -267,6 +366,9 @@ async function shutdown(signal: string) {
     discountValidationWorker.close(),
     loyaltyValuationWorker.close(),
     ocrWorker.close(),
+    priceMonitorWorker.close(),
+    oconusSyncWorker.close(),
+    expensePushWorker.close(),
   ]);
 
   await shutdownOcr();
@@ -277,4 +379,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-console.log('Worker is running — processing perdiem-sync, deal-alerts, discount-validation, loyalty-valuations, and receipt-ocr jobs.');
+console.log('Worker is running — processing perdiem-sync, deal-alerts, discount-validation, loyalty-valuations, receipt-ocr, price-monitor, oconus-sync, and expense-push jobs.');

@@ -113,7 +113,7 @@ receiptsRouter.post('/upload', upload.single('receipt'), async (req: Request, re
     console.log(`[Receipts] Uploaded receipt ${receipt.id} → queued OCR`);
 
     return res.status(201).json({ success: true, data: updated });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Upload receipt error:', err);
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {

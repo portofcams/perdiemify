@@ -192,6 +192,57 @@ export const scraperLogs = pgTable('scraper_logs', {
   runAt: timestamp('run_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const priceAlerts = pgTable('price_alerts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  tripId: uuid('trip_id').references(() => trips.id, { onDelete: 'set null' }),
+  destination: varchar('destination', { length: 255 }).notNull(),
+  destinationState: varchar('destination_state', { length: 2 }),
+  checkIn: date('check_in').notNull(),
+  checkOut: date('check_out').notNull(),
+  targetPrice: decimal('target_price', { precision: 10, scale: 2 }).notNull(),
+  currentBest: decimal('current_best', { precision: 10, scale: 2 }),
+  currentProvider: varchar('current_provider', { length: 255 }),
+  isActive: boolean('is_active').default(true).notNull(),
+  lastChecked: timestamp('last_checked', { withTimezone: true }),
+  lastAlertSent: timestamp('last_alert_sent', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_price_alerts_user').on(table.userId),
+  index('idx_price_alerts_active').on(table.isActive),
+]);
+
+export const oconusRates = pgTable('oconus_rates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  country: varchar('country', { length: 100 }).notNull(),
+  countryCode: varchar('country_code', { length: 3 }).notNull(),
+  location: varchar('location', { length: 255 }).notNull(),
+  lodgingRate: decimal('lodging_rate', { precision: 10, scale: 2 }).notNull(),
+  mieRate: decimal('mie_rate', { precision: 10, scale: 2 }).notNull(),
+  effectiveDate: date('effective_date'),
+  season: varchar('season', { length: 20 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('oconus_rates_lookup').on(table.fiscalYear, table.countryCode, table.location, table.effectiveDate),
+  index('idx_oconus_country').on(table.countryCode),
+]);
+
+export const integrations = pgTable('integrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  provider: varchar('provider', { length: 50 }).notNull(),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+  externalUserId: varchar('external_user_id', { length: 255 }),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('integrations_user_provider').on(table.userId, table.provider),
+  index('idx_integrations_user').on(table.userId),
+]);
+
 export const waitlistEmails = pgTable('waitlist_emails', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).unique().notNull(),

@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
 import { db } from '../db';
 import { users, trips } from '../db/schema';
+import { buildItinerary } from '../services/itinerary-builder';
 
 export const tripsRouter = Router();
 
@@ -188,5 +189,34 @@ tripsRouter.delete('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Delete trip error:', err);
     return res.status(500).json({ success: false, error: 'Failed to delete trip' });
+  }
+});
+
+/**
+ * POST /api/trips/:id/itinerary — Build optimized itinerary for a trip
+ */
+tripsRouter.post('/:id/itinerary', async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserId(req.auth!.userId);
+    if (!userId) {
+      return res.status(404).json({ success: false, error: 'Trip not found' });
+    }
+
+    // Verify ownership
+    const [trip] = await db
+      .select({ userId: trips.userId })
+      .from(trips)
+      .where(eq(trips.id, req.params.id as string))
+      .limit(1);
+
+    if (!trip || trip.userId !== userId) {
+      return res.status(404).json({ success: false, error: 'Trip not found' });
+    }
+
+    const itinerary = await buildItinerary(req.params.id as string);
+    return res.json({ success: true, data: itinerary });
+  } catch (err) {
+    console.error('Build itinerary error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to build itinerary' });
   }
 });
