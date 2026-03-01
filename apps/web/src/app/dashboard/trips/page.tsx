@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser, useAuth } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 
@@ -45,7 +45,6 @@ const US_STATES = [
 ];
 
 export default function TripsPage() {
-  const { user } = useUser();
   const { getToken } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,29 +136,9 @@ export default function TripsPage() {
   const activeTrips = trips.filter(t => t.status === 'active');
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-extrabold tracking-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-brand-700">
-              Perdiemify
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors">
-              Dashboard
-            </Link>
-            <Link href="/dashboard/trips" className="text-sm font-medium text-brand-600">
-              Trips
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">My Trips</h1>
             <p className="text-gray-500 mt-1">
@@ -334,7 +313,7 @@ export default function TripsPage() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold text-gray-900 truncate">{trip.name}</h3>
+                        <Link href={`/dashboard/trips/${trip.id}`} className="font-bold text-gray-900 truncate hover:text-brand-600 transition-colors">{trip.name}</Link>
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${statusColor(trip.status)}`}>
                           {trip.status}
                         </span>
@@ -382,7 +361,6 @@ export default function TripsPage() {
             })}
           </div>
         )}
-      </div>
-    </div>
+    </>
   );
 }

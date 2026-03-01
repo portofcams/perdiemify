@@ -289,32 +289,9 @@ export default function ReceiptsPage() {
     .reduce((s, r) => s + (Number(r.ocrAmount) || 0), 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-extrabold tracking-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-brand-700">
-              Perdiemify
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors">
-              Dashboard
-            </Link>
-            <Link href="/dashboard/meals" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors">
-              Meals
-            </Link>
-            <Link href="/dashboard/receipts" className="text-sm font-medium text-brand-600">
-              Receipts
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Receipts & Expenses</h1>
             <p className="text-gray-500 mt-1">Scan receipts, track expenses, export reports.</p>
@@ -681,7 +658,6 @@ export default function ReceiptsPage() {
             )}
           </>
         )}
-      </div>
-    </div>
+    </>
   );
 }

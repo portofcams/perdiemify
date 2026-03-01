@@ -1,7 +1,6 @@
 'use client';
 
 import { useUser, useAuth } from '@clerk/nextjs';
-import Link from 'next/link';
 import { useState } from 'react';
 
 const plans = [
@@ -84,24 +83,7 @@ export default function BillingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-extrabold tracking-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-brand-700">
-              Perdiemify
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-brand-600">
-              ← Back to Dashboard
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
+    <div className="max-w-5xl mx-auto py-4">
         <div className="text-center mb-12">
           <h1 className="text-3xl font-bold text-gray-900">Choose Your Plan</h1>
           <p className="mt-2 text-gray-500">
@@ -174,7 +156,6 @@ export default function BillingPage() {
             </div>
           ))}
         </div>
-      </div>
     </div>
   );
 }

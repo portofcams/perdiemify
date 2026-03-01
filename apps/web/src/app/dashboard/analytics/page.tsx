@@ -69,28 +69,8 @@ export default function AnalyticsPage() {
   const hasData = data && (data.tripCount > 0 || data.savingsByTrip.length > 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-extrabold tracking-tight">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-brand-700">
-              Perdiemify
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-brand-600 transition-colors">
-              Dashboard
-            </Link>
-            <Link href="/dashboard/analytics" className="text-sm font-medium text-brand-600">
-              Analytics
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <div className="mb-8">
+    <>
+      <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Savings Analytics</h1>
           <p className="text-gray-500 mt-1">Track your per diem savings over time.</p>
         </div>
@@ -233,7 +213,6 @@ export default function AnalyticsPage() {
             )}
           </>
         )}
-      </div>
-    </div>
+    </>
   );
 }
