@@ -366,7 +366,6 @@ export default function DealsPage() {
             </button>
           </div>
         )}
-      </div>
 
       {/* Submit Code Modal */}
       {showSubmitModal && (
