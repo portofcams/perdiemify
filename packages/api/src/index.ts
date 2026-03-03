@@ -31,6 +31,11 @@ const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
 app.use(cors({ origin: corsOrigins }));
 app.use(morgan('combined'));
 
+// Rate limiting
+import { globalLimiter, signupLimiter } from './middleware/rate-limit';
+app.use('/api', globalLimiter);
+app.use('/api/waitlist', signupLimiter);
+
 // Stripe webhook needs raw body for signature verification
 // Must come before express.json()
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
@@ -55,6 +60,9 @@ app.use('/api/integrations', integrationsRouter);
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err.name === 'ZodError') {
+    return res.status(400).json({ success: false, error: 'Validation failed' });
+  }
   console.error('Unhandled error:', err);
   res.status(500).json({ success: false, error: 'Internal server error' });
 });
