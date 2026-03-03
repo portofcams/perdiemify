@@ -1361,4 +1361,45 @@ a48bff1  feat: Phase 5 — price alerts, OCONUS rates, expense integrations, enh
 - [ ] Launch polish (Day 14)
 
 ---
-*Last updated: Mar 1, 2026 — Session 10*
+
+## 2026-03-02 — Session 11: Build Fix & Node Upgrade
+
+### Where we left off (Session 10)
+- Shared dashboard layout, settings page, and trip detail view all committed and pushed
+- Build had not been verified locally
+
+### Today's completed work
+
+#### Build verification & bug fix
+- [x] **Fixed JSX syntax error in `deals/page.tsx`** — extra `</div>` left over from nav stripping (line 369)
+- [x] Manually verified JSX structure of all 13 dashboard files — all balanced and correct
+
+#### Node.js upgrade (Node 25 → Node 22 LTS)
+- Discovered Next.js dev server and production build stalled at 0% CPU indefinitely on Node 25.6.1
+- Node 25 is bleeding-edge and not supported by Next.js 15.5
+- [x] Installed Node 22.22.0 LTS via `brew install node@22`
+- [x] Build compiles successfully in **39.9 seconds** on Node 22 (vs infinite hang on Node 25)
+- [x] TypeScript and linting both pass clean
+- [x] Added `export PATH="/opt/homebrew/opt/node@22/bin:$PATH"` to `~/.zshrc`
+- Only build failure: Clerk `Missing publishableKey` during static page generation — expected without `.env.local`
+
+#### Disk cleanup
+- Machine was at 98% disk full (5.4 GB free) — contributing to I/O stalls and swap thrashing (5 GB of 6 GB swap used)
+- [x] Cleaned npm cache (3.3 GB), Xcode DerivedData (1.8 GB), iOS DeviceSupport (5.7 GB), old simulators, Library/Caches (3 GB)
+- [x] Recovered ~14 GB → **19 GB free**
+- [x] Regenerated `package-lock.json` with Node 22
+
+### Commits pushed
+```
+1f65ca9  fix: remove extra closing div in deals page from nav stripping
+dfc09a5  chore: regenerate package-lock.json with Node 22 LTS
+```
+
+### Environment notes
+- **Node.js**: 22.22.0 LTS (default via ~/.zshrc PATH override)
+- **Node 25.6.1**: still installed at `/opt/homebrew/bin/node` but no longer default
+- **Disk**: 19 GB free (was 5.4 GB)
+- **Build time**: ~40s compile (Node 22) vs infinite stall (Node 25)
+
+---
+*Last updated: Mar 2, 2026 — Session 11*
