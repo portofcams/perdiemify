@@ -1402,4 +1402,88 @@ dfc09a5  chore: regenerate package-lock.json with Node 22 LTS
 - **Build time**: ~40s compile (Node 22) vs infinite stall (Node 25)
 
 ---
-*Last updated: Mar 2, 2026 — Session 11*
+
+## 2026-03-02 — Session 12: Launch Polish (Hardening)
+
+### Summary
+Added all production hardening that doesn't require API keys, credentials, or partner signups: Zod input validation on every API route, global rate limiting with Redis, security headers (HSTS, CSP, etc.), a global error boundary, and Playwright E2E tests.
+
+### Today's completed work
+
+#### 1. Zod input validation on all API routes
+- [x] Created `packages/api/src/middleware/validate.ts` — reusable `validateBody()` and `validateQuery()` Express middleware
+- [x] Added 12 new Zod schemas to `packages/shared/src/validators.ts` (was 5, now 17 total)
+  - `tripUpdateSchema`, `alertSchema`, `billingCheckoutSchema`, `dealSubmitSchema`, `dealVoteSchema`, `waitlistSchema`, `perdiemCalcSchema`, `oconusCalcSchema`, `receiptUpdateSchema`, `loyaltyRecommendSchema`, `expensifyConnectSchema`, `integrationPushSchema`
+- [x] Wired validation middleware into 12 route files, replacing scattered manual `if (!field)` checks
+- [x] Added `ZodError` catch in global error handler → returns 400 with field-level errors
+
+#### 2. Global rate limiting with Redis
+- [x] Installed `express-rate-limit` + `rate-limit-redis` in `packages/api`
+- [x] Created `packages/api/src/middleware/rate-limit.ts` — three limiters:
+  - `globalLimiter`: 100 req/min per IP on `/api`
+  - `authLimiter`: 10 req/min (for future use)
+  - `signupLimiter`: 5 req/min on `/api/waitlist`
+- [x] Redis-backed via existing `getRedis()`, falls back to in-memory when Redis unavailable
+
+#### 3. Security headers + global error boundary
+- [x] Added `async headers()` to `apps/web/next.config.js`:
+  - `Strict-Transport-Security` (2 years, includeSubDomains, preload)
+  - `X-Frame-Options: DENY`
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy` (disable camera, microphone, geolocation)
+  - `Content-Security-Policy` (self + Clerk + Stripe + Google Analytics + Cloudflare)
+- [x] Created `apps/web/src/app/global-error.tsx` — catches root layout crashes with inline styles (CSS chain is broken when triggered)
+
+#### 4. Playwright E2E tests
+- [x] Installed `@playwright/test` in `apps/web`
+- [x] Created `apps/web/playwright.config.ts` — Chromium-only, localhost:3000, webServer auto-start
+- [x] `e2e/public-pages.spec.ts` — homepage hero, nav links, pricing, search, calculator, 404, Clerk sign-in
+- [x] `e2e/navigation.spec.ts` — search link nav, unauthenticated dashboard/trips redirect to sign-in
+- [x] `e2e/security-headers.spec.ts` — verifies X-Content-Type-Options, X-Frame-Options, Referrer-Policy, CSP
+- [x] Added `test` and `test:ui` scripts to `apps/web/package.json`
+- [x] Added Playwright artifacts to `.gitignore`
+
+### New files created
+```
+packages/api/src/middleware/validate.ts     — Zod validation Express middleware
+packages/api/src/middleware/rate-limit.ts   — Rate limiting middleware (Redis + fallback)
+apps/web/src/app/global-error.tsx           — Root error boundary (inline styles)
+apps/web/playwright.config.ts               — Playwright configuration
+apps/web/e2e/public-pages.spec.ts           — Public page render tests
+apps/web/e2e/navigation.spec.ts             — Navigation & auth redirect tests
+apps/web/e2e/security-headers.spec.ts       — Security header verification tests
+```
+
+### Files modified
+```
+packages/shared/src/validators.ts           — +12 new Zod schemas
+packages/api/src/index.ts                   — ZodError handler + rate limiter mounting
+packages/api/src/routes/{alerts,billing,deals,integrations,loyalty,meals,perdiem,receipts,search,trips,users,waitlist}.ts — Zod middleware
+apps/web/next.config.js                     — Security headers
+apps/web/package.json                       — Playwright test scripts
+.gitignore                                  — Playwright artifacts
+```
+
+### Commits pushed
+```
+01a3426  feat: add Zod input validation to all API routes
+9137976  feat: add global rate limiting with Redis-backed store
+0084400  feat: add security headers and global error boundary
+f5f7ce1  feat: add Playwright E2E tests for public pages, nav, and headers
+```
+
+### Build verification
+- `next build` compiles in **12.5s** (Node 22) — types and linting pass
+- `tsc --noEmit` on `packages/shared` — clean (all new schemas compile)
+- Only expected failure: Clerk `Missing publishableKey` during static generation (no `.env.local`)
+
+### Remaining launch items (require user involvement)
+- Affiliate links: need partner signup (Booking.com, Skyscanner, etc.)
+- Stripe: need publishable + secret keys in production env
+- Clerk: need publishable key in production env
+- Resend: need API key for waitlist emails
+- Domain/DNS: production deployment configuration
+
+---
+*Last updated: Mar 2, 2026 — Session 12*
