@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { expensifyConnectSchema, integrationPushSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, integrations } from '../db/schema';
 import { expensePushQueue } from '../queue/queues';
@@ -133,19 +135,12 @@ integrationsRouter.get('/concur/callback', async (req: Request, res: Response) =
 });
 
 /** POST /api/integrations/expensify/connect — Save Expensify API credentials */
-integrationsRouter.post('/expensify/connect', async (req: Request, res: Response) => {
+integrationsRouter.post('/expensify/connect', validateBody(expensifyConnectSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) return res.status(400).json({ success: false, error: 'User not found' });
 
     const { partnerUserID, partnerUserSecret, employeeEmail } = req.body;
-
-    if (!partnerUserID || !partnerUserSecret) {
-      return res.status(400).json({
-        success: false,
-        error: 'partnerUserID and partnerUserSecret are required',
-      });
-    }
 
     // Store credentials as "userID:secret"
     await db
@@ -200,15 +195,12 @@ integrationsRouter.delete('/:id', async (req: Request, res: Response) => {
 });
 
 /** POST /api/integrations/push/:tripId — Queue expense push for a trip */
-integrationsRouter.post('/push/:tripId', async (req: Request, res: Response) => {
+integrationsRouter.post('/push/:tripId', validateBody(integrationPushSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) return res.status(400).json({ success: false, error: 'User not found' });
 
     const { provider } = req.body;
-    if (!provider || !['concur', 'expensify'].includes(provider)) {
-      return res.status(400).json({ success: false, error: 'provider must be "concur" or "expensify"' });
-    }
 
     // Verify user has active integration
     const [integration] = await db

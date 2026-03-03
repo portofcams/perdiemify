@@ -48,6 +48,89 @@ export const userProfileSchema = z.object({
   customMieRate: z.number().positive().optional(),
 });
 
+// --- Partial schemas for PATCH endpoints ---
+
+export const tripUpdateSchema = tripSchema.partial().extend({
+  status: z.enum(['active', 'completed', 'cancelled']).optional(),
+  totalSavings: z.number().min(0).optional(),
+});
+
+// --- Additional endpoint schemas ---
+
+export const alertSchema = z.object({
+  destination: z.string().min(1).max(255),
+  destinationState: z.string().length(2).optional(),
+  checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  targetPrice: z.number().positive(),
+  tripId: z.string().uuid().optional(),
+});
+
+export const billingCheckoutSchema = z.object({
+  plan: z.enum(['pro', 'proplus']),
+});
+
+export const dealSubmitSchema = z.object({
+  code: z.string().min(2).max(50),
+  provider: z.string().min(1).max(100),
+  type: z.enum(['percent', 'fixed', 'promo']).optional(),
+  value: z.number().optional(),
+  description: z.string().max(500).optional(),
+  applicableTo: z.enum(['hotel', 'flight', 'car', 'all']).optional(),
+});
+
+export const dealVoteSchema = z.object({
+  vote: z.enum(['up', 'down']),
+});
+
+export const waitlistSchema = z.object({
+  email: z.string().email('Valid email address required'),
+});
+
+export const perdiemCalcSchema = z.object({
+  city: z.string().min(1),
+  state: z.string().min(1),
+  checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  perDiemSource: z.enum(['gsa', 'jtr', 'corporate', 'custom']).optional(),
+  customLodgingRate: z.number().positive().optional(),
+  customMieRate: z.number().positive().optional(),
+});
+
+export const oconusCalcSchema = z.object({
+  countryCode: z.string().min(2).max(3),
+  location: z.string().min(1),
+  checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+});
+
+export const receiptUpdateSchema = z.object({
+  ocrVendor: z.string().max(255).optional(),
+  ocrAmount: z.number().min(0).nullable().optional(),
+  ocrDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  ocrCategory: z.string().max(50).nullable().optional(),
+  isVerified: z.boolean().optional(),
+  tripId: z.string().uuid().nullable().optional(),
+});
+
+export const loyaltyRecommendSchema = z.object({
+  bookingType: z.enum(['hotel', 'flight', 'car']),
+  provider: z.string().min(1),
+  amountUsd: z.number().positive(),
+});
+
+export const expensifyConnectSchema = z.object({
+  partnerUserID: z.string().min(1),
+  partnerUserSecret: z.string().min(1),
+  employeeEmail: z.string().email().optional(),
+});
+
+export const integrationPushSchema = z.object({
+  provider: z.enum(['concur', 'expensify']),
+});
+
+// --- Type exports ---
+
 export type SearchParamsInput = z.infer<typeof searchParamsSchema>;
 export type TripInput = z.infer<typeof tripSchema>;
 export type MealInput = z.infer<typeof mealSchema>;

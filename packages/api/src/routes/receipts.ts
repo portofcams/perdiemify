@@ -17,6 +17,8 @@ import { Router, Request, Response } from 'express';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { receiptUpdateSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, receipts, trips, meals } from '../db/schema';
 import { getStorage, getContentType, receiptStorageKey } from '../utils/storage';
@@ -549,7 +551,7 @@ receiptsRouter.get('/:id', async (req: Request, res: Response) => {
 
 // ─── PATCH /:id — Update / verify OCR data ──────────────────────
 
-receiptsRouter.patch('/:id', async (req: Request, res: Response) => {
+receiptsRouter.patch('/:id', validateBody(receiptUpdateSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) {

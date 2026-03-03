@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { billingCheckoutSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users } from '../db/schema';
 
@@ -16,18 +18,11 @@ export const billingRouter = Router();
  *
  * Body: { plan: 'pro' | 'proplus' }
  */
-billingRouter.post('/create-checkout', requireAuth, async (req: Request, res: Response) => {
+billingRouter.post('/create-checkout', requireAuth, validateBody(billingCheckoutSchema), async (req: Request, res: Response) => {
   try {
     const { plan } = req.body;
     const clerkId = req.auth!.userId;
     const email = req.auth!.email;
-
-    if (!plan || !['pro', 'proplus'].includes(plan)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid plan. Must be "pro" or "proplus".',
-      });
-    }
 
     // Get or create the price from the Stripe product
     const productId = plan === 'pro'

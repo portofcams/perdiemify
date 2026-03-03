@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { mealSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, meals, trips } from '../db/schema';
 
@@ -122,7 +124,7 @@ mealsRouter.get('/summary', async (req: Request, res: Response) => {
 /**
  * POST /api/meals — Log a meal expense
  */
-mealsRouter.post('/', async (req: Request, res: Response) => {
+mealsRouter.post('/', validateBody(mealSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) {
@@ -130,13 +132,6 @@ mealsRouter.post('/', async (req: Request, res: Response) => {
     }
 
     const { tripId, date, mealType, amount, vendor, notes } = req.body;
-
-    if (!tripId || !date || !mealType || amount == null) {
-      return res.status(400).json({
-        success: false,
-        error: 'tripId, date, mealType, and amount are required',
-      });
-    }
 
     // Verify trip ownership
     const [trip] = await db

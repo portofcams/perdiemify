@@ -3,7 +3,8 @@ import { fetchGSARates } from '../services/gsa-rates';
 import { calculatePerDiem } from '../services/perdiem-calculator';
 import { getCachedRateCount } from '../services/gsa-rate-sync';
 import { perdiemSyncQueue, oconusSyncQueue } from '../queue/queues';
-import { getCurrentFiscalYear } from '@perdiemify/shared';
+import { getCurrentFiscalYear, perdiemCalcSchema, oconusCalcSchema } from '@perdiemify/shared';
+import { validateBody } from '../middleware/validate';
 import { getOconusRate, listOconusCountries, listOconusLocations } from '../services/state-dept-rates';
 
 export const perdiemRouter = Router();
@@ -66,16 +67,9 @@ perdiemRouter.get('/rates', async (req, res) => {
 });
 
 // POST /api/perdiem/calculate
-perdiemRouter.post('/calculate', async (req, res) => {
+perdiemRouter.post('/calculate', validateBody(perdiemCalcSchema), async (req, res) => {
   try {
     const { city, state, checkIn, checkOut, perDiemSource, customLodgingRate, customMieRate } = req.body;
-
-    if (!city || !state || !checkIn || !checkOut) {
-      return res.status(400).json({
-        success: false,
-        error: 'city, state, checkIn, and checkOut are required',
-      });
-    }
 
     const result = await calculatePerDiem({
       city,
@@ -186,16 +180,9 @@ perdiemRouter.get('/oconus/rates', async (req, res) => {
 });
 
 // POST /api/perdiem/oconus/calculate — Calculate international per diem
-perdiemRouter.post('/oconus/calculate', async (req, res) => {
+perdiemRouter.post('/oconus/calculate', validateBody(oconusCalcSchema), async (req, res) => {
   try {
     const { countryCode, location, checkIn, checkOut } = req.body;
-
-    if (!countryCode || !location || !checkIn || !checkOut) {
-      return res.status(400).json({
-        success: false,
-        error: 'countryCode, location, checkIn, and checkOut are required',
-      });
-    }
 
     const fiscalYear = getCurrentFiscalYear();
     const rate = await getOconusRate(countryCode, location, fiscalYear);

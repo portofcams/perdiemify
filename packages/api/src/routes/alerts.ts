@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, desc, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { alertSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, priceAlerts, trips } from '../db/schema';
 
@@ -37,19 +39,12 @@ alertsRouter.get('/', async (req: Request, res: Response) => {
 });
 
 /** POST /api/alerts — Create a new price alert */
-alertsRouter.post('/', async (req: Request, res: Response) => {
+alertsRouter.post('/', validateBody(alertSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) return res.status(400).json({ success: false, error: 'User not found' });
 
     const { destination, destinationState, checkIn, checkOut, targetPrice, tripId } = req.body;
-
-    if (!destination || !checkIn || !checkOut || targetPrice == null) {
-      return res.status(400).json({
-        success: false,
-        error: 'destination, checkIn, checkOut, and targetPrice are required',
-      });
-    }
 
     const [alert] = await db
       .insert(priceAlerts)

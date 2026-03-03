@@ -1,21 +1,16 @@
 import { Router } from 'express';
 import type { SearchParams, SearchResponse } from '@perdiemify/shared';
+import { searchParamsSchema } from '@perdiemify/shared';
+import { validateBody } from '../middleware/validate';
 import { searchAndEnrich, searchAndEnrichFlights } from '../services/search-aggregator';
 import { getCached, setCache } from '../utils/redis';
 
 export const searchRouter = Router();
 
 // POST /api/search/hotels
-searchRouter.post('/hotels', async (req, res) => {
+searchRouter.post('/hotels', validateBody(searchParamsSchema.omit({ type: true })), async (req, res) => {
   try {
     const { destination, destinationState, checkIn, checkOut, adults } = req.body;
-
-    if (!destination || !checkIn || !checkOut) {
-      return res.status(400).json({
-        success: false,
-        error: 'destination, checkIn, and checkOut are required',
-      });
-    }
 
     const params: SearchParams = {
       destination,
@@ -49,16 +44,9 @@ searchRouter.post('/hotels', async (req, res) => {
 });
 
 // POST /api/search/flights
-searchRouter.post('/flights', async (req, res) => {
+searchRouter.post('/flights', validateBody(searchParamsSchema.omit({ type: true }).extend({ origin: searchParamsSchema.shape.origin.unwrap() })), async (req, res) => {
   try {
     const { origin, destination, destinationState, checkIn, checkOut, adults } = req.body;
-
-    if (!origin || !destination || !checkIn) {
-      return res.status(400).json({
-        success: false,
-        error: 'origin, destination, and checkIn are required',
-      });
-    }
 
     const params: SearchParams & { origin: string } = {
       origin,
@@ -92,16 +80,9 @@ searchRouter.post('/flights', async (req, res) => {
 });
 
 // POST /api/search/cars — mock results (no good free car API)
-searchRouter.post('/cars', async (req, res) => {
+searchRouter.post('/cars', validateBody(searchParamsSchema.omit({ type: true })), async (req, res) => {
   try {
     const { destination, destinationState, checkIn, checkOut } = req.body;
-
-    if (!destination || !checkIn || !checkOut) {
-      return res.status(400).json({
-        success: false,
-        error: 'destination, checkIn, and checkOut are required',
-      });
-    }
 
     // Car rentals don't have a free Amadeus API, so we return curated mock results
     // with realistic pricing. Affiliate links will connect to real providers in Day 6.

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { tripSchema, tripUpdateSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, trips } from '../db/schema';
 import { buildItinerary } from '../services/itinerary-builder';
@@ -72,7 +74,7 @@ tripsRouter.get('/:id', async (req: Request, res: Response) => {
 /**
  * POST /api/trips — Create a new trip
  */
-tripsRouter.post('/', async (req: Request, res: Response) => {
+tripsRouter.post('/', validateBody(tripSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) {
@@ -80,13 +82,6 @@ tripsRouter.post('/', async (req: Request, res: Response) => {
     }
 
     const { name, destination, destinationState, origin, startDate, endDate, lodgingRate, mieRate, notes } = req.body;
-
-    if (!name || !destination || !startDate || !endDate || lodgingRate == null || mieRate == null) {
-      return res.status(400).json({
-        success: false,
-        error: 'name, destination, startDate, endDate, lodgingRate, and mieRate are required',
-      });
-    }
 
     const [newTrip] = await db
       .insert(trips)
@@ -116,7 +111,7 @@ tripsRouter.post('/', async (req: Request, res: Response) => {
 /**
  * PATCH /api/trips/:id — Update a trip
  */
-tripsRouter.patch('/:id', async (req: Request, res: Response) => {
+tripsRouter.patch('/:id', validateBody(tripUpdateSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) {

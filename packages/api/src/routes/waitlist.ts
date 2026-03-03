@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { Resend } from 'resend';
+import { validateBody } from '../middleware/validate';
+import { waitlistSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { waitlistEmails } from '../db/schema';
 
@@ -11,16 +13,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 /**
  * POST /api/waitlist — Add email to waitlist + send confirmation
  */
-waitlistRouter.post('/', async (req: Request, res: Response) => {
+waitlistRouter.post('/', validateBody(waitlistSchema), async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
-
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({
-        success: false,
-        error: 'Valid email address required',
-      });
-    }
 
     const normalizedEmail = email.toLowerCase().trim();
 

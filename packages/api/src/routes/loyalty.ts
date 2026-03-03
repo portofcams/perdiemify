@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { loyaltyAccountSchema, loyaltyRecommendSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, loyaltyAccounts, loyaltyValuations } from '../db/schema';
 import {
@@ -64,7 +66,7 @@ loyaltyRouter.get('/accounts', requireAuth, async (req: Request, res: Response) 
 /**
  * POST /api/loyalty/accounts — Add a loyalty account
  */
-loyaltyRouter.post('/accounts', requireAuth, async (req: Request, res: Response) => {
+loyaltyRouter.post('/accounts', requireAuth, validateBody(loyaltyAccountSchema), async (req: Request, res: Response) => {
   try {
     const userId = await getUserId(req.auth!.userId);
     if (!userId) {
@@ -72,13 +74,6 @@ loyaltyRouter.post('/accounts', requireAuth, async (req: Request, res: Response)
     }
 
     const { programName, programCategory, accountNumber, pointsBalance, statusLevel } = req.body;
-
-    if (!programName || !programCategory) {
-      return res.status(400).json({
-        success: false,
-        error: 'programName and programCategory are required',
-      });
-    }
 
     const [account] = await db
       .insert(loyaltyAccounts)
@@ -249,13 +244,9 @@ loyaltyRouter.get('/summary', requireAuth, async (req: Request, res: Response) =
  * POST /api/loyalty/recommend — Credit card recommendation for a booking
  * Body: { bookingType: 'hotel'|'flight'|'car', provider: string, amountUsd: number }
  */
-loyaltyRouter.post('/recommend', async (req: Request, res: Response) => {
+loyaltyRouter.post('/recommend', validateBody(loyaltyRecommendSchema), async (req: Request, res: Response) => {
   try {
     const { bookingType, provider, amountUsd } = req.body;
-
-    if (!bookingType || !provider || !amountUsd) {
-      return res.status(400).json({ success: false, error: 'bookingType, provider, and amountUsd are required' });
-    }
 
     const recommendations = recommendCreditCard(bookingType, provider, amountUsd);
     return res.json({ success: true, data: recommendations });

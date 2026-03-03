@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import { dealAlertsQueue } from '../queue/queues';
 import { requireAuth, optionalAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { dealSubmitSchema, dealVoteSchema } from '@perdiemify/shared';
 import {
   recalculateSuccessRates,
   expireStaleCode,
@@ -109,29 +111,14 @@ dealsRouter.get('/', async (req: Request, res: Response) => {
  * POST /api/deals/submit — Community code submission (requires auth)
  * Body: { code, provider, type, value, description, applicableTo }
  */
-dealsRouter.post('/submit', requireAuth, async (req: Request, res: Response) => {
+dealsRouter.post('/submit', requireAuth, validateBody(dealSubmitSchema), async (req: Request, res: Response) => {
   try {
     const { code, provider, type, value, description, applicableTo } = req.body;
     const clerkId = req.auth!.userId;
 
-    // Validate required fields
-    if (!code || !provider) {
-      return res.status(400).json({ success: false, error: 'code and provider are required' });
-    }
-
-    // Validate code format
     const cleanCode = code.trim().toUpperCase();
-    if (cleanCode.length < 2 || cleanCode.length > 50) {
-      return res.status(400).json({ success: false, error: 'Code must be 2-50 characters' });
-    }
-
-    // Validate type
-    const validTypes = ['percent', 'fixed', 'promo'];
-    const codeType = validTypes.includes(type) ? type : 'promo';
-
-    // Validate applicableTo
-    const validCategories = ['hotel', 'flight', 'car', 'all'];
-    const category = validCategories.includes(applicableTo) ? applicableTo : 'all';
+    const codeType = type || 'promo';
+    const category = applicableTo || 'all';
 
     // Look up the user's internal UUID from clerk_id
     const userResult = await db.execute(
@@ -180,17 +167,15 @@ dealsRouter.post('/submit', requireAuth, async (req: Request, res: Response) => 
 /**
  * POST /api/deals/:id/vote — Upvote or downvote a code
  */
-dealsRouter.post('/:id/vote', async (req: Request, res: Response) => {
+dealsRouter.post('/:id/vote', validateBody(dealVoteSchema), async (req: Request, res: Response) => {
   try {
     const { vote } = req.body;
     const id = req.params.id;
 
     if (vote === 'up') {
       await db.execute(sql`UPDATE discount_codes SET upvotes = upvotes + 1 WHERE id = ${id}::uuid`);
-    } else if (vote === 'down') {
-      await db.execute(sql`UPDATE discount_codes SET downvotes = downvotes + 1 WHERE id = ${id}::uuid`);
     } else {
-      return res.status(400).json({ success: false, error: 'vote must be "up" or "down"' });
+      await db.execute(sql`UPDATE discount_codes SET downvotes = downvotes + 1 WHERE id = ${id}::uuid`);
     }
 
     return res.json({ success: true, message: 'Vote recorded' });

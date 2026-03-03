@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { requireAuth } from '../middleware/auth';
+import { validateBody } from '../middleware/validate';
+import { userProfileSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users, trips, bookings } from '../db/schema';
 
@@ -59,7 +61,7 @@ usersRouter.get('/me', async (req: Request, res: Response) => {
 /**
  * PATCH /api/users/me — Update user profile
  */
-usersRouter.patch('/me', async (req: Request, res: Response) => {
+usersRouter.patch('/me', validateBody(userProfileSchema.partial()), async (req: Request, res: Response) => {
   try {
     const clerkId = req.auth!.userId;
     const { name, perDiemSource, customLodgingRate, customMieRate } = req.body;
