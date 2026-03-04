@@ -96,23 +96,26 @@ export default function CalculatorPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                <label htmlFor="city" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                   City
                 </label>
                 <input
+                  id="city"
                   type="text"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="Washington"
+                  autoComplete="address-level2"
                   required
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-brand-500 focus:outline-none transition-colors text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                <label htmlFor="state" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                   State
                 </label>
                 <select
+                  id="state"
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                   required
@@ -125,10 +128,11 @@ export default function CalculatorPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                <label htmlFor="checkIn" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                   Check-in Date
                 </label>
                 <input
+                  id="checkIn"
                   type="date"
                   value={checkIn}
                   onChange={(e) => setCheckIn(e.target.value)}
@@ -137,10 +141,11 @@ export default function CalculatorPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                <label htmlFor="checkOut" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                   Check-out Date
                 </label>
                 <input
+                  id="checkOut"
                   type="date"
                   value={checkOut}
                   onChange={(e) => setCheckOut(e.target.value)}
