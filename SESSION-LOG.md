@@ -1486,4 +1486,87 @@ f5f7ce1  feat: add Playwright E2E tests for public pages, nav, and headers
 - Domain/DNS: production deployment configuration
 
 ---
-*Last updated: Mar 2, 2026 — Session 12*
+
+## 2026-03-04 — Session 13: Final Polish (SEO, Accessibility, Fixes)
+
+### Summary
+Added JSON-LD structured data for SEO, per-page OG images for search and calculator, fixed the billing page's hardcoded plan tier, applied accessibility improvements, and added more E2E test coverage. Phase 1 roadmap is now 100% complete for all items that don't require API keys or partner signups.
+
+### Today's completed work
+
+#### 1. JSON-LD structured data
+- [x] Created `apps/web/src/components/JsonLd.tsx` — server component rendering 3 schema blocks
+  - Organization (name, url, logo, description)
+  - SoftwareApplication (TravelApplication, 3 pricing offers)
+  - BreadcrumbList (Home → Search → Calculator)
+- [x] Injected `<JsonLd />` into root `layout.tsx` body
+
+#### 2. Per-page OG images
+- [x] Created `apps/web/src/app/search/opengraph-image.tsx` — "Search & Save" with hotel/flight/car stats
+- [x] Created `apps/web/src/app/calculator/opengraph-image.tsx` — "Per Diem Calculator" with rate stats
+- Both follow existing green gradient pattern from root opengraph-image.tsx
+
+#### 3. Billing page fix
+- [x] Replaced `const currentPlan = 'free'; // TODO` with `useEffect` fetching `/api/users/me/stats`
+- [x] Added loading spinner guard while plan tier loads
+- [x] Improved price period text contrast (`text-gray-400` → `text-gray-500`)
+
+#### 4. Accessibility fixes
+- [x] Added `htmlFor`/`id` pairs to all 4 calculator form fields (city, state, checkIn, checkOut)
+- [x] Added `autoComplete="address-level2"` on city input, `autoComplete="email"` on waitlist input
+- [x] Added `aria-hidden="true"` to 6 decorative SVGs in landing page feature cards
+
+#### 5. Additional E2E tests
+- [x] Created `apps/web/e2e/search-calculator.spec.ts` — 7 new tests:
+  - Search page type tabs and header navigation
+  - Calculator form fields, submit button, and SEO content
+  - JSON-LD structured data presence on homepage
+  - Sitemap.xml accessibility
+
+### New files created
+```
+apps/web/src/components/JsonLd.tsx              — JSON-LD structured data component
+apps/web/src/app/search/opengraph-image.tsx     — Search page OG image
+apps/web/src/app/calculator/opengraph-image.tsx — Calculator page OG image
+apps/web/e2e/search-calculator.spec.ts          — Search + calculator E2E tests
+```
+
+### Files modified
+```
+apps/web/src/app/layout.tsx                     — Import + render JsonLd
+apps/web/src/app/dashboard/billing/page.tsx     — Plan tier fetch + contrast fix
+apps/web/src/app/calculator/page.tsx            — Form label associations + autoComplete
+apps/web/src/app/page.tsx                       — Email autoComplete + aria-hidden SVGs
+```
+
+### Commits pushed
+```
+a55ec68  feat: add JSON-LD structured data for SEO
+2e56838  feat: add per-page OG images for search and calculator
+7ea177c  fix: fetch actual plan tier on billing page instead of hardcoded free
+ae6ffad  fix: accessibility improvements for calculator and landing page
+6994031  test: add E2E tests for search, calculator, and SEO verification
+```
+
+### Build verification
+- `next build` compiles successfully (Node 22) — types and linting pass
+- Only expected failure: Clerk `Missing publishableKey` during static generation (no `.env.local`)
+
+### Phase 1 status: COMPLETE
+All 14 roadmap items are done. Remaining work requires user involvement:
+- API keys: Stripe, Clerk, Resend, Amadeus (production)
+- Affiliate partner signups
+- Production deployment (DNS, env vars, Cloudflare)
+
+### Phase 2+ status: ALREADY BUILT
+Exploration revealed all Phase 2+ backend services were already implemented:
+- Discount scraper engine (5 scrapers, circuit breaker, 4h interval)
+- BullMQ job queue (9 queues with cron scheduling)
+- Receipt OCR (Claude Vision + Tesseract fallback)
+- Expense export (CSV + PDF) and push (Concur + Expensify)
+- Analytics API + UI (multi-chart dashboard)
+- Itinerary builder (Amadeus integration)
+- GSA/OCONUS rate sync, loyalty tracker, deal alerts, price monitor
+
+---
+*Last updated: Mar 4, 2026 — Session 13*
