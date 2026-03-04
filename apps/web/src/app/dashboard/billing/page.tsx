@@ -1,7 +1,7 @@
 'use client';
 
 import { useUser, useAuth } from '@clerk/nextjs';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const plans = [
   {
@@ -43,11 +43,33 @@ const plans = [
 ];
 
 export default function BillingPage() {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const currentPlan = 'free'; // TODO: Fetch from API
+  const [currentPlan, setCurrentPlan] = useState('free');
+  const [planLoading, setPlanLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPlan() {
+      try {
+        const token = await getToken();
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const res = await fetch(`${apiUrl}/api/users/me/stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success && data.data?.subscriptionTier) {
+          setCurrentPlan(data.data.subscriptionTier);
+        }
+      } catch {
+        // Keep 'free' as default
+      } finally {
+        setPlanLoading(false);
+      }
+    }
+    fetchPlan();
+  }, [getToken]);
 
   const handleUpgrade = async (planId: string) => {
     if (planId === 'free') return;
@@ -81,6 +103,14 @@ export default function BillingPage() {
       setLoading(null);
     }
   };
+
+  if (!isLoaded || planLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto py-4">
@@ -117,7 +147,7 @@ export default function BillingPage() {
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
                 <div className="mt-2">
                   <span className="text-4xl font-extrabold text-gray-900">{plan.price}</span>
-                  <span className="text-sm text-gray-400 font-medium">{plan.period}</span>
+                  <span className="text-sm text-gray-500 font-medium">{plan.period}</span>
                 </div>
               </div>
 
