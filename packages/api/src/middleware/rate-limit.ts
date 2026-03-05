@@ -6,7 +6,7 @@ function createStore() {
   const redis = getRedis();
   if (!redis) return undefined; // falls back to in-memory
   return new RedisStore({
-    sendCommand: (...args: string[]) => redis.call(...args) as Promise<any>,
+    sendCommand: (...args: string[]) => (redis as any).call(...args) as Promise<any>,
   });
 }
 

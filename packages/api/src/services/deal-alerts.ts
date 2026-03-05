@@ -3,7 +3,16 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { users } from '../db/schema';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('RESEND_API_KEY is not configured');
+    _resend = new Resend(key);
+  }
+  return _resend;
+}
 const FROM_EMAIL = process.env.RESEND_FROM || 'Perdiemify <deals@perdiemify.com>';
 
 interface DealAlert {
@@ -95,7 +104,7 @@ export async function sendDealAlerts(newDeals: DealAlert[]): Promise<number> {
 
   for (const user of proPlusUsers) {
     try {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM_EMAIL,
         to: user.email,
         subject: `${newDeals.length} New Travel Deal${newDeals.length !== 1 ? 's' : ''} Found — Perdiemify`,

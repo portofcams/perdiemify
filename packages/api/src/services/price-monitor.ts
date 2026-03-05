@@ -11,7 +11,16 @@ import { db } from '../db';
 import { priceAlerts, users } from '../db/schema';
 import { searchHotels } from '../providers/amadeus';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('RESEND_API_KEY is not configured');
+    _resend = new Resend(key);
+  }
+  return _resend;
+}
 const FROM_EMAIL = process.env.RESEND_FROM || 'Perdiemify <alerts@perdiemify.com>';
 
 export async function checkAllPriceAlerts(): Promise<{ checked: number; alertsSent: number }> {
@@ -166,7 +175,7 @@ async function sendPriceDropEmail(userId: string, info: PriceDropInfo): Promise<
   `;
 
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: FROM_EMAIL,
       to: user.email,
       subject: `Price Drop: ${info.hotelName} in ${info.destination} — $${info.currentPrice.toFixed(2)}/night`,

@@ -7,9 +7,18 @@ import { billingCheckoutSchema } from '@perdiemify/shared';
 import { db } from '../db';
 import { users } from '../db/schema';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-01-27.acacia' as Stripe.LatestApiVersion,
-});
+let _stripe: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
+    _stripe = new Stripe(key, {
+      apiVersion: '2025-01-27.acacia' as Stripe.LatestApiVersion,
+    });
+  }
+  return _stripe;
+}
 
 export const billingRouter = Router();
 
@@ -43,7 +52,7 @@ billingRouter.post('/create-checkout', requireAuth, validateBody(billingCheckout
 
     if (!priceId) {
       // Auto-discover price from the product
-      const prices = await stripe.prices.list({
+      const prices = await getStripe().prices.list({
         product: productId,
         active: true,
         type: 'recurring',
@@ -56,7 +65,7 @@ billingRouter.post('/create-checkout', requireAuth, validateBody(billingCheckout
       } else {
         // Create a default price if none exists
         const amount = plan === 'pro' ? 999 : 1999;
-        const price = await stripe.prices.create({
+        const price = await getStripe().prices.create({
           product: productId,
           unit_amount: amount,
           currency: 'usd',
@@ -96,7 +105,7 @@ billingRouter.post('/create-checkout', requireAuth, validateBody(billingCheckout
       sessionConfig.customer_email = email;
     }
 
-    const session = await stripe.checkout.sessions.create(sessionConfig);
+    const session = await getStripe().checkout.sessions.create(sessionConfig);
 
     return res.json({
       success: true,
@@ -139,7 +148,7 @@ billingRouter.post('/portal', requireAuth, async (req: Request, res: Response) =
 
     const origin = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/dashboard`,
     });
@@ -172,7 +181,7 @@ billingRouter.post('/webhook', async (req: Request, res: Response) => {
       // Verify webhook signature in production
       const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
       if (rawBody) {
-        event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+        event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
       } else {
         // Fallback: trust the payload (only for development)
         event = req.body as Stripe.Event;
@@ -314,7 +323,7 @@ billingRouter.get('/status', requireAuth, async (req: Request, res: Response) =>
 
     if (user.stripeSubscriptionId) {
       try {
-        const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const sub = await getStripe().subscriptions.retrieve(user.stripeSubscriptionId);
         // In Stripe v20+, current_period_end is on subscription items, not the subscription itself
         const item = sub.items?.data?.[0];
         if (item?.current_period_end) {

@@ -8,7 +8,16 @@ import { waitlistEmails } from '../db/schema';
 
 export const waitlistRouter = Router();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('RESEND_API_KEY is not configured');
+    _resend = new Resend(key);
+  }
+  return _resend;
+}
 
 /**
  * POST /api/waitlist — Add email to waitlist + send confirmation
@@ -44,7 +53,7 @@ waitlistRouter.post('/', validateBody(waitlistSchema), async (req: Request, res:
     // Send confirmation email via Resend
     if (process.env.RESEND_API_KEY) {
       try {
-        await resend.emails.send({
+        await getResend().emails.send({
           from: 'Perdiemify <onboarding@resend.dev>',
           to: normalizedEmail,
           subject: "You're on the Perdiemify waitlist! 🎉",
