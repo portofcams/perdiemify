@@ -248,9 +248,9 @@ tripsRouter.get('/:id/report', async (req: Request, res: Response) => {
       const dayMeals = mealRows.filter(m => m.date === dateStr);
       const dayReceipts = receiptRows.filter(r => r.ocrDate === dateStr);
       const lodgingSpent = dayReceipts
-        .filter(r => r.ocrCategory === 'lodging')
-        .reduce((s, r) => s + Number(r.ocrAmount || 0), 0);
-      const mieSpent = dayMeals.reduce((s, m) => s + Number(m.amount), 0);
+        .filter((r: typeof receiptRows[number]) => r.ocrCategory === 'lodging')
+        .reduce((s: number, r: typeof receiptRows[number]) => s + Number(r.ocrAmount || 0), 0);
+      const mieSpent = dayMeals.reduce((s: number, m: typeof mealRows[number]) => s + Number(m.amount), 0);
       const lodgingAllowance = Number(trip.lodgingRate);
       const mieAllowance = Number(trip.mieRate);
       complianceDays.push({

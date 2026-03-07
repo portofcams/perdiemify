@@ -43,7 +43,7 @@ featuredListingsRouter.get('/', async (req: Request, res: Response) => {
     for (const listing of filtered) {
       await db
         .update(featuredListings)
-        .set({ impressions: sql`${featuredListings.impressions} + 1` })
+        .set({ impressions: sql<number>`coalesce(${featuredListings.impressions}, 0) + 1` })
         .where(eq(featuredListings.id, listing.id));
     }
 
@@ -71,7 +71,7 @@ featuredListingsRouter.post('/:id/click', async (req: Request, res: Response) =>
 
     await db
       .update(featuredListings)
-      .set({ clicks: sql`${featuredListings.clicks} + 1` })
+      .set({ clicks: sql<number>`coalesce(${featuredListings.clicks}, 0) + 1` })
       .where(eq(featuredListings.id, req.params.id));
 
     return res.json({ success: true, data: { landingUrl: listing.landingUrl } });
