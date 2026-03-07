@@ -44,7 +44,7 @@ featuredListingsRouter.get('/', async (req: Request, res: Response) => {
       await db
         .update(featuredListings)
         .set({ impressions: sql<number>`coalesce(${featuredListings.impressions}, 0) + 1` })
-        .where(eq(featuredListings.id, listing.id));
+        .where(eq(featuredListings.id, listing.id as string));
     }
 
     return res.json({ success: true, data: filtered });
@@ -62,7 +62,7 @@ featuredListingsRouter.post('/:id/click', async (req: Request, res: Response) =>
     const [listing] = await db
       .select({ id: featuredListings.id, landingUrl: featuredListings.landingUrl })
       .from(featuredListings)
-      .where(eq(featuredListings.id, req.params.id))
+      .where(eq(featuredListings.id, req.params.id as string))
       .limit(1);
 
     if (!listing) {
@@ -72,7 +72,7 @@ featuredListingsRouter.post('/:id/click', async (req: Request, res: Response) =>
     await db
       .update(featuredListings)
       .set({ clicks: sql<number>`coalesce(${featuredListings.clicks}, 0) + 1` })
-      .where(eq(featuredListings.id, req.params.id));
+      .where(eq(featuredListings.id, req.params.id as string));
 
     return res.json({ success: true, data: { landingUrl: listing.landingUrl } });
   } catch (err) {

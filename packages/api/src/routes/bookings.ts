@@ -54,7 +54,7 @@ bookingsRouter.get('/:id', requireAuth, async (req: Request, res: Response) => {
     const [booking] = await db
       .select()
       .from(bookings)
-      .where(and(eq(bookings.id, req.params.id), eq(bookings.userId, userId)))
+      .where(and(eq(bookings.id, req.params.id as string), eq(bookings.userId, userId)))
       .limit(1);
 
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
@@ -96,7 +96,7 @@ bookingsRouter.patch('/:id', requireAuth, validateBody(bookingUpdateSchema), asy
     const [existing] = await db
       .select({ userId: bookings.userId })
       .from(bookings)
-      .where(eq(bookings.id, req.params.id))
+      .where(eq(bookings.id, req.params.id as string))
       .limit(1);
 
     if (!existing || existing.userId !== userId) {
@@ -106,7 +106,7 @@ bookingsRouter.patch('/:id', requireAuth, validateBody(bookingUpdateSchema), asy
     const [updated] = await db
       .update(bookings)
       .set(req.body)
-      .where(eq(bookings.id, req.params.id))
+      .where(eq(bookings.id, req.params.id as string))
       .returning();
 
     return res.json({ success: true, data: updated });
@@ -127,7 +127,7 @@ bookingsRouter.delete('/:id', requireAuth, async (req: Request, res: Response) =
     const [existing] = await db
       .select({ userId: bookings.userId })
       .from(bookings)
-      .where(eq(bookings.id, req.params.id))
+      .where(eq(bookings.id, req.params.id as string))
       .limit(1);
 
     if (!existing || existing.userId !== userId) {
