@@ -134,7 +134,7 @@ bookingsRouter.delete('/:id', requireAuth, async (req: Request, res: Response) =
       return res.status(404).json({ success: false, error: 'Booking not found' });
     }
 
-    await db.delete(bookings).where(eq(bookings.id, req.params.id));
+    await db.delete(bookings).where(eq(bookings.id, req.params.id as string));
     return res.json({ success: true, message: 'Booking deleted' });
   } catch (err) {
     console.error('Delete booking error:', err);
