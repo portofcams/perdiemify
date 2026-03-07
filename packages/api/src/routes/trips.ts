@@ -4,8 +4,9 @@ import { requireAuth } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { tripSchema, tripUpdateSchema } from '@perdiemify/shared';
 import { db } from '../db';
-import { users, trips } from '../db/schema';
+import { users, trips, meals, receipts } from '../db/schema';
 import { buildItinerary } from '../services/itinerary-builder';
+import { generateExpensePdf, generateExpenseCsv, CsvFormat } from '../services/expense-export';
 
 export const tripsRouter = Router();
 
@@ -184,6 +185,106 @@ tripsRouter.delete('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Delete trip error:', err);
     return res.status(500).json({ success: false, error: 'Failed to delete trip' });
+  }
+});
+
+/**
+ * GET /api/trips/:id/report — Download expense report (PDF or CSV)
+ */
+tripsRouter.get('/:id/report', async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserId(req.auth!.userId);
+    if (!userId) {
+      return res.status(404).json({ success: false, error: 'Trip not found' });
+    }
+
+    const [trip] = await db
+      .select()
+      .from(trips)
+      .where(eq(trips.id, req.params.id as string))
+      .limit(1);
+
+    if (!trip || trip.userId !== userId) {
+      return res.status(404).json({ success: false, error: 'Trip not found' });
+    }
+
+    // Fetch meals and receipts for this trip
+    const [tripMeals, tripReceipts] = await Promise.all([
+      db.select().from(meals).where(eq(meals.tripId, trip.id)),
+      db.select().from(receipts).where(eq(receipts.tripId, trip.id)),
+    ]);
+
+    const tripData = {
+      id: trip.id,
+      name: trip.name,
+      destination: trip.destination,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      lodgingRate: Number(trip.lodgingRate),
+      mieRate: Number(trip.mieRate),
+    };
+
+    const receiptRows = tripReceipts.map(r => ({
+      ocrDate: r.ocrDate,
+      ocrVendor: r.ocrVendor,
+      ocrCategory: r.ocrCategory,
+      ocrAmount: r.ocrAmount,
+      isVerified: r.isVerified,
+    }));
+
+    const mealRows = tripMeals.map(m => ({
+      date: m.date,
+      mealType: m.mealType,
+      vendor: m.vendor,
+      amount: String(m.amount),
+    }));
+
+    // Build compliance days from trip date range
+    const start = new Date(trip.startDate);
+    const end = new Date(trip.endDate);
+    const complianceDays = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      const dayMeals = mealRows.filter(m => m.date === dateStr);
+      const dayReceipts = receiptRows.filter(r => r.ocrDate === dateStr);
+      const lodgingSpent = dayReceipts
+        .filter(r => r.ocrCategory === 'lodging')
+        .reduce((s, r) => s + Number(r.ocrAmount || 0), 0);
+      const mieSpent = dayMeals.reduce((s, m) => s + Number(m.amount), 0);
+      const lodgingAllowance = Number(trip.lodgingRate);
+      const mieAllowance = Number(trip.mieRate);
+      complianceDays.push({
+        date: dateStr,
+        lodgingSpent,
+        lodgingAllowance,
+        mieSpent,
+        mieAllowance,
+        totalSpent: lodgingSpent + mieSpent,
+        totalAllowance: lodgingAllowance + mieAllowance,
+        delta: (lodgingAllowance + mieAllowance) - (lodgingSpent + mieSpent),
+      });
+    }
+
+    const format = (req.query.format as string) || 'pdf';
+
+    if (format === 'csv') {
+      const csvFormat = (req.query.csvFormat as CsvFormat) || 'generic';
+      const csv = generateExpenseCsv(tripData, receiptRows, mealRows, csvFormat);
+      const filename = `${trip.name.replace(/[^a-zA-Z0-9]/g, '_')}_report.csv`;
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csv);
+    }
+
+    // Default: PDF
+    const pdfBuffer = await generateExpensePdf(tripData, complianceDays, receiptRows, mealRows);
+    const filename = `${trip.name.replace(/[^a-zA-Z0-9]/g, '_')}_report.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Generate report error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate report' });
   }
 });
 

@@ -129,6 +129,25 @@ export const integrationPushSchema = z.object({
   provider: z.enum(['concur', 'expensify']),
 });
 
+export const bookingSchema = z.object({
+  tripId: z.string().uuid().nullable().optional(),
+  type: z.enum(['hotel', 'flight', 'car']),
+  provider: z.string().min(1).max(100),
+  providerName: z.string().max(255).optional(),
+  price: z.number().positive(),
+  perDiemDelta: z.number().optional(),
+  affiliatePartner: z.string().max(100).optional(),
+  affiliateLink: z.string().url().optional(),
+  bookingRef: z.string().max(255).optional(),
+  loyaltyProgram: z.string().max(100).optional(),
+  loyaltyPointsEarned: z.number().int().min(0).default(0),
+  discountCodeUsed: z.string().max(100).optional(),
+  checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+export const bookingUpdateSchema = bookingSchema.partial();
+
 // --- Type exports ---
 
 export type SearchParamsInput = z.infer<typeof searchParamsSchema>;

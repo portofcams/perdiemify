@@ -18,6 +18,8 @@ import { receiptsRouter } from './routes/receipts';
 import { analyticsRouter } from './routes/analytics';
 import { alertsRouter } from './routes/alerts';
 import { integrationsRouter } from './routes/integrations';
+import { bookingsRouter } from './routes/bookings';
+import { featuredListingsRouter } from './routes/featured-listings';
 
 const app = express();
 const PORT = process.env.API_PORT || 3001;
@@ -57,6 +59,8 @@ app.use('/api/receipts', receiptsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/integrations', integrationsRouter);
+app.use('/api/bookings', bookingsRouter);
+app.use('/api/featured-listings', featuredListingsRouter);
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -69,7 +73,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 app.listen(PORT, () => {
   console.log(`Perdiemify API running on port ${PORT}`);
-  console.log(`Routes: health, search, perdiem, trips, billing, users, waitlist, webhooks, deals, loyalty, meals, receipts, analytics, alerts, integrations`);
+  console.log(`Routes: health, search, perdiem, trips, billing, users, waitlist, webhooks, deals, loyalty, meals, receipts, analytics, alerts, integrations, bookings, featured-listings`);
 });
 
 export default app;

@@ -113,6 +113,7 @@ export default function TripDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -149,6 +150,30 @@ export default function TripDetailPage() {
   }, [id, getToken, apiUrl]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const downloadReport = useCallback(async (format: 'pdf' | 'csv') => {
+    setDownloading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${apiUrl}/api/trips/${id}/report?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent
+    } finally {
+      setDownloading(false);
+    }
+  }, [id, getToken, apiUrl]);
 
   if (loading) {
     return (
@@ -214,12 +239,28 @@ export default function TripDetailPage() {
               {new Date(trip.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
-          <Link
-            href="/dashboard/trips"
-            className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors shrink-0"
-          >
-            Edit Trip
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => downloadReport('pdf')}
+              disabled={downloading}
+              className="px-4 py-2 text-sm font-medium bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50"
+            >
+              {downloading ? 'Generating...' : 'Download PDF'}
+            </button>
+            <button
+              onClick={() => downloadReport('csv')}
+              disabled={downloading}
+              className="px-4 py-2 text-sm font-medium bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              CSV
+            </button>
+            <Link
+              href="/dashboard/trips"
+              className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              Edit Trip
+            </Link>
+          </div>
         </div>
 
         {/* Key stats */}

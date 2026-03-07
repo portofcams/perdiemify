@@ -15,6 +15,8 @@ import {
   CreditCard,
   Settings,
   X,
+  CalendarCheck,
+  Sparkles,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -23,6 +25,8 @@ const NAV_ITEMS = [
   { label: 'Receipts', href: '/dashboard/receipts', icon: Receipt },
   { label: 'Meals', href: '/dashboard/meals', icon: UtensilsCrossed },
   { label: 'Loyalty', href: '/dashboard/loyalty', icon: Star },
+  { label: 'Bookings', href: '/dashboard/bookings', icon: CalendarCheck },
+  { label: 'Card Optimizer', href: '/dashboard/card-optimizer', icon: Sparkles },
   { label: 'Deals', href: '/dashboard/deals', icon: Tag },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },

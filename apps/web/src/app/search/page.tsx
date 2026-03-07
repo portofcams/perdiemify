@@ -1,12 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { UnifiedSearchBar, type SearchValues } from '@/components/search/UnifiedSearchBar';
 import { PerDiemBreakdown } from '@/components/results/PerDiemBreakdown';
 import { ResultCard } from '@/components/results/ResultCard';
 import { SavingsComparison } from '@/components/results/SavingsComparison';
 import { apiFetch } from '@/lib/api';
 import type { BookingType, PerDiemRates, SearchResult, SearchResponse } from '@/types';
+import { AdSlot } from '@/components/AdSlot';
+
+interface FeaturedListing {
+  id: string;
+  advertiserName: string;
+  listingType: string;
+  creativeUrl: string | null;
+  landingUrl: string;
+}
+
 
 interface PerDiemCalcResponse extends PerDiemRates {
   summary: string;
@@ -85,12 +95,50 @@ export default function SearchPage() {
   const [searchDone, setSearchDone] = useState(false);
   const [searchParams, setSearchParams] = useState<{ city: string; state: string; type: BookingType } | null>(null);
   const [usingMockData, setUsingMockData] = useState(false);
+  const [sponsoredListings, setSponsoredListings] = useState<FeaturedListing[]>([]);
+  const [sortBy, setSortBy] = useState<'savings' | 'price' | 'rating'>('savings');
+  const [budgetFilter, setBudgetFilter] = useState<'all' | 'under' | 'near' | 'over'>('all');
+  const [minRating, setMinRating] = useState(0);
+
+  const filteredResults = useMemo(() => {
+    if (!searchResponse) return [];
+    let results = [...searchResponse.results];
+
+    // Budget filter
+    if (budgetFilter !== 'all') {
+      results = results.filter((r) => r.perDiemBadge === budgetFilter);
+    }
+
+    // Rating filter
+    if (minRating > 0) {
+      results = results.filter((r) => (r.rating || 0) >= minRating);
+    }
+
+    // Sort
+    results.sort((a, b) => {
+      switch (sortBy) {
+        case 'savings': return b.perDiemDelta - a.perDiemDelta;
+        case 'price': return a.price - b.price;
+        case 'rating': return (b.rating || 0) - (a.rating || 0);
+        default: return 0;
+      }
+    });
+
+    return results;
+  }, [searchResponse, sortBy, budgetFilter, minRating]);
 
   async function handleSearch(values: SearchValues) {
     setLoading(true);
     setSearchDone(false);
     setUsingMockData(false);
     setSearchParams({ city: values.city, state: values.state, type: values.type });
+
+    // Fetch sponsored listings in parallel
+    apiFetch<FeaturedListing[]>(
+      `/api/featured-listings?type=${values.type}&destination=${encodeURIComponent(values.city)}`
+    ).then((res) => {
+      if (res.success && res.data) setSponsoredListings(res.data);
+    }).catch(() => {});
 
     // Determine which API endpoint to call
     const endpoint = values.type === 'flight'
@@ -222,8 +270,55 @@ export default function SearchPage() {
                   {usingMockData && (
                     <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">Demo data</span>
                   )}
-                  <span className="text-sm text-gray-400">{searchResponse.results.length} results</span>
+                  <span className="text-sm text-gray-400">{filteredResults.length} of {searchResponse.results.length}</span>
                 </div>
+              </div>
+
+              {/* Filter & Sort Controls */}
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {/* Sort */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'savings' | 'price' | 'rating')}
+                  className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg text-gray-700"
+                >
+                  <option value="savings">Sort: Most Savings</option>
+                  <option value="price">Sort: Lowest Price</option>
+                  <option value="rating">Sort: Highest Rating</option>
+                </select>
+
+                {/* Budget filter */}
+                <div className="flex gap-1">
+                  {(['all', 'under', 'near', 'over'] as const).map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setBudgetFilter(b)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                        budgetFilter === b
+                          ? b === 'under' ? 'bg-brand-50 text-brand-700 border-brand-200'
+                            : b === 'near' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : b === 'over' ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {b === 'all' ? 'All' : b === 'under' ? 'Under Budget' : b === 'near' ? 'Near Budget' : 'Over Budget'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Rating filter */}
+                <select
+                  value={minRating}
+                  onChange={(e) => setMinRating(Number(e.target.value))}
+                  className="px-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg text-gray-700"
+                >
+                  <option value={0}>Any Rating</option>
+                  <option value={3}>3+ Stars</option>
+                  <option value={3.5}>3.5+ Stars</option>
+                  <option value={4}>4+ Stars</option>
+                  <option value={4.5}>4.5+ Stars</option>
+                </select>
               </div>
 
               <div className="space-y-4">
@@ -236,21 +331,38 @@ export default function SearchPage() {
                   />
                 )}
 
-                {/* All results */}
-                {searchResponse.results.map((result) => (
-                  <ResultCard
-                    key={result.id}
-                    result={result}
-                    rates={rates || undefined}
-                    isSavingsMax={result.id === searchResponse.savingsMax?.id}
-                    isSmartValue={result.id === searchResponse.smartValue?.id}
-                  />
+                {/* All results with sponsored cards injected every 4th */}
+                {filteredResults.map((result, idx) => (
+                  <div key={result.id}>
+                    <ResultCard
+                      result={result}
+                      rates={rates || undefined}
+                      isSavingsMax={result.id === searchResponse.savingsMax?.id}
+                      isSmartValue={result.id === searchResponse.smartValue?.id}
+                    />
+                    {/* Inject sponsored listing after every 4th result */}
+                    {(idx + 1) % 4 === 0 && sponsoredListings[Math.floor(idx / 4)] && (
+                      <SponsoredCard listing={sponsoredListings[Math.floor(idx / 4)]} />
+                    )}
+                  </div>
                 ))}
 
-                {searchResponse.results.length === 0 && (
+                {filteredResults.length === 0 && (
                   <div className="text-center py-12">
                     <div className="text-4xl mb-3">{emptyIcon}</div>
-                    <p className="text-gray-500">No {typeLabel.toLowerCase()} found for these dates. Try different dates or another city.</p>
+                    <p className="text-gray-500">
+                      {searchResponse.results.length === 0
+                        ? `No ${typeLabel.toLowerCase()} found for these dates. Try different dates or another city.`
+                        : 'No results match your filters. Try adjusting them.'}
+                    </p>
+                    {searchResponse.results.length > 0 && (
+                      <button
+                        onClick={() => { setBudgetFilter('all'); setMinRating(0); }}
+                        className="mt-3 text-sm font-medium text-brand-600 hover:text-brand-700"
+                      >
+                        Clear filters
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -260,6 +372,8 @@ export default function SearchPage() {
             {rates && (
               <div className="space-y-4">
                 <PerDiemBreakdown rates={rates} />
+
+                <AdSlot size="300x250" slot="sidebar-search" className="my-4" />
 
                 {searchResponse.savingsMax && searchResponse.savingsMax.perDiemDelta > 0 && (
                   <div className="bg-brand-50 border border-brand-200 rounded-2xl p-4">
@@ -276,6 +390,13 @@ export default function SearchPage() {
           </div>
         )}
 
+        {/* Sponsored listings below results */}
+        {searchDone && sponsoredListings.length > 0 && (
+          <div className="mt-6">
+            <AdSlot size="728x90" slot="below-results" />
+          </div>
+        )}
+
         {/* Empty state */}
         {!searchDone && (
           <div className="text-center py-16">
@@ -286,6 +407,41 @@ export default function SearchPage() {
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SponsoredCard({ listing }: { listing: FeaturedListing }) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  const handleClick = async () => {
+    try {
+      await fetch(`${apiUrl}/api/featured-listings/${listing.id}/click`, { method: 'POST' });
+    } catch { /* silent */ }
+    window.open(listing.landingUrl, '_blank', 'noopener');
+  };
+
+  return (
+    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 mt-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {listing.creativeUrl && (
+            <img src={listing.creativeUrl} alt="" className="w-10 h-10 rounded-lg object-cover" />
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">Sponsored</span>
+              <span className="font-semibold text-gray-900 text-sm">{listing.advertiserName}</span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handleClick}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          View Deal
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { ClerkProvider } from '@clerk/nextjs';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { JsonLd } from '@/components/JsonLd';
@@ -59,6 +60,14 @@ export default function RootLayout({
       <html lang="en">
         <body className="min-h-screen font-sans">
           <JsonLd />
+          {process.env.NEXT_PUBLIC_ADSENSE_ID && (
+            <Script
+              async
+              src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_ID}`}
+              crossOrigin="anonymous"
+              strategy="lazyOnload"
+            />
+          )}
           {children}
           <PWAInstallPrompt />
         </body>
